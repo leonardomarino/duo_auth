@@ -60,9 +60,6 @@
         "phpstan/phpstan": "^1.10",
         "friendsofphp/php-cs-fixer": "^3.40"
     },
-    "autoload": {
-        "classmap": ["duo_auth.php"]
-    },
     "autoload-dev": {
         "psr-4": {
             "DuoAuth\\Tests\\": "tests/"
