@@ -1,0 +1,80 @@
+<?php
+/**
+ * Duo Security Configuration
+ * Save this file as: plugins/duo_auth/config.inc.php
+ */
+
+// ============================================================================
+// REQUIRED: Duo API Credentials
+// ============================================================================
+$config['duo_client_id'] = 'YOUR_CLIENT_ID_HERE';
+$config['duo_client_secret'] = 'YOUR_CLIENT_SECRET_HERE';
+$config['duo_api_hostname'] = 'api-xxxxxxxx.duosecurity.com';
+
+// REQUIRED: Redirect URI
+// Must match the URL in your Duo Admin Panel exactly
+$config['duo_redirect_uri'] = 'https://your-domain.com/roundcube/?_task=login&_action=plugin.duo_callback';
+
+// ============================================================================
+// General Settings
+// ============================================================================
+$config['duo_enabled'] = true;
+
+// Failmode: 'secure' (block login if Duo is down) or 'open' (allow login)
+$config['duo_failmode'] = 'secure';
+
+// Timeout for Duo API calls (seconds)
+$config['duo_timeout'] = 60;
+
+// Session timeout after successful Duo auth (seconds)
+$config['duo_session_timeout'] = 900; // 15 minutes
+
+// ============================================================================
+// Logging Settings
+// ============================================================================
+$config['duo_log_enabled'] = true;
+$config['duo_log_level'] = 'info'; // debug, info, warning, error
+
+// ============================================================================
+// 1. GLOBAL BYPASS (Use with caution)
+// ============================================================================
+
+// Users who skip Duo EVERYWHERE (e.g., service accounts)
+$config['duo_bypass_users'] = [
+    // 'scanner_bot',
+    // 'monitoring_user',
+];
+
+// IPs where EVERYONE skips Duo (e.g., internal office network)
+$config['duo_bypass_ips'] = [
+    // '192.168.1.0/24',   // Office network
+    // '10.0.0.0/8',       // Private network
+    // '::1',              // IPv6 localhost
+    '127.0.0.1',           // IPv4 localhost
+];
+
+// ============================================================================
+// 2. CONDITIONAL BYPASS (User + IP Rule)
+// ============================================================================
+// Users who skip Duo ONLY when at specific IPs
+
+$config['duo_bypass_rules'] = [
+    // 'john' => ['192.168.1.100', '10.0.0.50'],
+    // 'mary' => ['192.168.1.0/24'],
+    // 'admin' => ['127.0.0.1', '::1'],
+];
+
+// ============================================================================
+// Advanced Settings (Optional)
+// ============================================================================
+
+// Custom messages
+$config['duo_msg_unavailable'] = 'Two-factor authentication service is temporarily unavailable.';
+$config['duo_msg_failed'] = 'Two-factor authentication failed. Please try again.';
+$config['duo_msg_bypass'] = 'Two-factor authentication bypassed for this session.';
+
+// Proxy settings (if behind reverse proxy)
+$config['duo_trust_proxy_headers'] = false; // Set to true if behind proxy
+$config['duo_trusted_proxies'] = [
+    // '192.168.1.1',  // Your reverse proxy IP
+];

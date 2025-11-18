@@ -1,0 +1,34 @@
+# Configuration (NEVER commit real credentials!)
+config.inc.php
+duo_auth.conf
+*.conf.local
+
+# Composer
+/vendor/
+composer.lock
+
+# Logs
+/logs/
+*.log
+
+# Cache/temp
+/cache/
+/temp/
+*.cache
+
+# IDE
+.idea/
+.vscode/
+*.swp
+.DS_Store
+
+# Testing
+/coverage/
+.phpunit.result.cache
+.php-cs-fixer.cache
+
+# Backup files
+*.backup
+*.bak
+*.old
+*.bk
