@@ -1,6 +1,6 @@
 # Roundcube lmr/duo_auth
 
-[![Version](https://img.shields.io/badge/version-2.0.0-blue.svg)](https://github.com/leonardomarino/duo_auth)
+[![Version](https://img.shields.io/badge/version-2.0.2-blue.svg)](https://github.com/leonardomarino/duo_auth)
 [![License](https://img.shields.io/badge/license-GPL--3.0--or--later-green.svg)](LICENSE)
 [![PHP](https://img.shields.io/badge/php-%3E%3D7.4-purple.svg)](https://php.net)
 
@@ -10,7 +10,7 @@ This is a Roundcube webmail plugin that enables [Duo Security](https://duo.com) 
 
 It redirects to Duo's secure authentication page after successful username/password authentication, requiring a 2nd Factor of Authentication using Duo Security (push, SMS, call, hardware token code).
 
-## 🚀 What's New in v2.0.0
+## 🚀 What's New in v2.0.2
 
 - **Duo Universal Prompt** - Modern, accessible authentication experience
 - **Enhanced Security** - OIDC/OAuth 2.0 based authentication flow
@@ -179,7 +179,7 @@ This project is licensed under the GPL-3.0-or-later License - see the [LICENSE](
 ## CHANGELOG
 =========
 
-### v2.0.0 (2025)
+### v2.0.2 (2025)
 - Complete rewrite for Duo Universal Prompt (Web SDK v4)
 - Added three-tier bypass system
 - IPv4/IPv6 with CIDR support
