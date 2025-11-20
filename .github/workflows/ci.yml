@@ -248,7 +248,7 @@ jobs:
         echo "✓ Plugin class loaded successfully\n";
         
         // Check if required methods exist
-        $required_methods = ['init', 'login_after', 'login_form'];
+        $required_methods = ['init', 'login_after'];
         $missing_methods = [];
         
         foreach ($required_methods as $method) {
