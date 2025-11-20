@@ -1,0 +1,68 @@
+name: PHP CI - Roundcube Plugin Testing
+
+on:
+  push:
+    branches: [ master, main ]
+  pull_request:
+    branches: [ master, main ]
+  workflow_dispatch: # Allows manual trigger
+
+jobs:
+  test:
+    # Use a matrix to test different PHP and Roundcube environments
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        php-version: ['8.1', '8.2', '8.3']
+        roundcube-version: ['1.5', '1.6', '2.0']
+
+    name: PHP ${{ matrix.php-version }} - RC ${{ matrix.roundcube-version }}
+
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v4
+
+    - name: Setup PHP
+      uses: shivammathur/setup-php@v2
+      with:
+        php-version: ${{ matrix.php-version }}
+        extensions: json, curl, mbstring
+        coverage: none # Disable coverage collection for faster builds
+
+    - name: Get Composer Cache Directory
+      id: composer-cache
+      run: echo "dir=$(composer config cache-dir)" >> $GITHUB_OUTPUT
+
+    - name: Setup Composer Cache
+      uses: actions/cache@v4
+      with:
+        path: ${{ steps.composer-cache.outputs.dir }}
+        key: ${{ runner.os }}-composer-${{ hashFiles('**/composer.lock') }}
+        restore-keys: ${{ runner.os }}-composer-
+
+    - name: Install Composer Dependencies
+      run: |
+        # Install the dependencies required for the plugin, including Roundcube itself
+        # The 'duosecurity/duo_universal_php' dependency needs OpenSSL/libffi (handled by system)
+        composer require roundcube/roundcubemail:"${{ matrix.roundcube-version }}.*" --no-update
+        composer install --prefer-dist --no-interaction
+        
+    - name: Execute Plugin Logic Test (Simulated Installation)
+      # This step verifies that the plugin structure is valid and dependencies work.
+      # You would replace this with a command to run your PHPUnit tests if you add a 'tests/' directory later.
+      run: |
+        echo "Verifying plugin installation and autoloading..."
+        
+        # Check if the required Duo SDK library is accessible
+        if [ ! -f vendor/duosecurity/duo_universal_php/src/Client.php ]; then
+          echo "ERROR: Duo Universal PHP SDK not found in vendor directory."
+          exit 1
+        fi
+        
+        # Check if the main plugin file exists in the vendor directory (due to roundcube-plugin type)
+        if [ ! -d vendor/lmr/duo_auth ]; then
+          echo "ERROR: Plugin directory structure mismatch."
+          exit 1
+        fi
+        
+        echo "Installation structure confirmed."
