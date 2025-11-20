@@ -44,8 +44,9 @@ jobs:
       run: |
         # Install the dependencies required for the plugin, including Roundcube itself
         # The 'duosecurity/duo_universal_php' dependency needs OpenSSL/libffi (handled by system)
-        composer require roundcube/roundcubemail:"^1.6" --no-update
-        composer install --prefer-dist --no-interaction
+        composer require roundcube/roundcubemail:"^1.6" --no-update --prefer-stable
+        composer install --prefer-dist --no-interaction --minimum-stability dev
+
         
     - name: Execute Plugin Logic Test (Simulated Installation)
       # This step verifies that the plugin structure is valid and dependencies work.
