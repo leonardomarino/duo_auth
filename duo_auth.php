@@ -1,10 +1,12 @@
 <?php
 /**
  * Duo Security Plugin for Roundcube
- * Version: 2.0.0
+ * Version: 2.0.1
  * 
  * Supports: Global User Bypass, Global IP Bypass, and User-Specific IP Bypass
  * Features: IPv4/IPv6 support, Proxy detection, Failmode, Comprehensive logging
+ * 
+ * Security Fix: Added startup hook to prevent back-button bypass (CVE-2025-XXXXX)
  */
 
 declare(strict_types=1);
@@ -29,6 +31,7 @@ class duo_auth extends rcube_plugin
         $this->debug_mode = $this->rc->config->get('duo_log_level') === 'debug';
         
         // Register hooks
+        $this->add_hook('startup', [$this, 'startup_handler']);  // SECURITY FIX: Check for incomplete Duo auth
         $this->add_hook('login_after', [$this, 'login_handler']);
         $this->register_action('plugin.duo_callback', [$this, 'callback_handler']);
         
@@ -36,6 +39,123 @@ class duo_auth extends rcube_plugin
         $this->add_hook('logout_after', [$this, 'logout_handler']);
         
         $this->log('info', 'Duo Auth plugin initialized');
+    }
+
+    /**
+     * SECURITY FIX: Startup handler to check for incomplete Duo authentication
+     * 
+     * This prevents the back-button bypass where a user could:
+     * 1. Login with username/password (session created)
+     * 2. Get redirected to Duo
+     * 3. Press browser back button without completing Duo
+     * 4. Return to an authenticated session
+     * 
+     * This hook runs on every request and ensures that if Duo auth was initiated,
+     * it must be completed before the user can access any resources.
+     */
+    public function startup_handler(array $args): array
+    {
+        // Skip check for login task and duo callback action
+        $task = $this->rc->task ?? '';
+        $action = $this->rc->action ?? '';
+        
+        // Allow the callback handler to process
+        if ($action === 'plugin.duo_callback') {
+            return $args;
+        }
+        
+        // Allow login page itself
+        if ($task === 'login' && $action !== 'login') {
+            return $args;
+        }
+        
+        // Check if Duo auth was initiated but not completed
+        if ($this->is_duo_auth_pending()) {
+            $username = $_SESSION['duo_user'] ?? 'unknown';
+            $this->log('warning', "SECURITY: Incomplete Duo auth detected for user '$username' - forcing logout");
+            
+            // Clear the pending state
+            $this->cleanup_duo_session();
+            
+            // Force logout
+            $this->rc->kill_session();
+            
+            // Redirect to login with error message
+            $this->rc->output->show_message(
+                $this->rc->config->get('duo_msg_incomplete', 'Two-factor authentication was not completed. Please login again.'),
+                'error'
+            );
+            $this->rc->output->redirect(['_task' => 'login']);
+            exit;
+        }
+        
+        // For authenticated sessions (non-login tasks), verify Duo was completed
+        if ($task !== 'login' && $this->rc->user && $this->rc->user->ID) {
+            // User appears logged in - check if Duo is required and was completed
+            if (!$this->is_duo_authenticated() && $this->is_duo_required_for_session()) {
+                $username = $this->rc->user->get_username() ?? 'unknown';
+                $this->log('warning', "SECURITY: User '$username' logged in without Duo verification - forcing logout");
+                
+                $this->rc->kill_session();
+                $this->rc->output->show_message(
+                    $this->rc->config->get('duo_msg_required', 'Two-factor authentication is required.'),
+                    'error'
+                );
+                $this->rc->output->redirect(['_task' => 'login']);
+                exit;
+            }
+        }
+        
+        return $args;
+    }
+
+    /**
+     * Check if Duo authentication is pending (started but not completed)
+     */
+    private function is_duo_auth_pending(): bool
+    {
+        // If we have duo_state but no duo_authenticated, auth was started but not finished
+        return isset($_SESSION['duo_state']) && 
+               isset($_SESSION['duo_user']) && 
+               !isset($_SESSION['duo_authenticated']);
+    }
+
+    /**
+     * Check if Duo should be required for the current session
+     * Returns false if user would be bypassed anyway
+     */
+    private function is_duo_required_for_session(): bool
+    {
+        // Check if Duo is enabled at all
+        if (!$this->rc->config->get('duo_enabled', true)) {
+            return false;
+        }
+        
+        $username = $this->rc->user ? $this->rc->user->get_username() : null;
+        $user_ip = $this->get_client_ip();
+        
+        // Check global user bypass
+        $global_users = $this->rc->config->get('duo_bypass_users', []);
+        if ($username && in_array($username, $global_users, true)) {
+            return false;
+        }
+        
+        // Check global IP bypass
+        $global_ips = $this->rc->config->get('duo_bypass_ips', []);
+        if ($this->is_ip_whitelisted($user_ip, $global_ips)) {
+            return false;
+        }
+        
+        // Check conditional bypass
+        $rules_map = $this->rc->config->get('duo_bypass_rules', []);
+        if ($username && isset($rules_map[$username])) {
+            if ($this->is_ip_whitelisted($user_ip, $rules_map[$username])) {
+                return false;
+            }
+        }
+        
+        // Duo is required
+        return true;
     }
 
     /**
@@ -147,7 +267,7 @@ class duo_auth extends rcube_plugin
             // Generate state for CSRF protection
             $state = $duo_client->generateState();
             
-            // Store session data
+            // Store session data - this marks auth as "pending"
             $_SESSION['duo_state'] = $state;
             $_SESSION['duo_user'] = $username;
             $_SESSION['duo_ip'] = $user_ip;
