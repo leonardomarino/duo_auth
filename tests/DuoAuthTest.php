@@ -41,6 +41,18 @@ class DuoAuthTest extends TestCase
         $this->assertInstanceOf('rcube_plugin', $plugin);
     }
     
+    public function testRequiredMethodsExist()
+    {
+        $required_methods = ['init', 'login_after', 'startup', 'logout_after', 'callback_handler'];
+        
+        foreach ($required_methods as $method) {
+            $this->assertTrue(
+                method_exists('duo_auth', $method),
+                "Missing required method: $method"
+            );
+        }
+    }
+    
     // =========================================================================
     // BACK-BUTTON BYPASS SECURITY TESTS (CVE-2025-XXXXX)
     // =========================================================================
@@ -52,7 +64,7 @@ class DuoAuthTest extends TestCase
      */
     public function testBackButtonBypassIsBlocked()
     {
-        // Setup: Simulate state after login_handler redirected to Duo
+        // Setup: Simulate state after login_after redirected to Duo
         $rc = DuoAuthTestHelper::configure([
             'task' => 'mail',
             'action' => '',
@@ -68,9 +80,9 @@ class DuoAuthTest extends TestCase
         $plugin = new duo_auth($rc);
         $plugin->init();
         
-        // Execute: Call startup_handler (simulating back button navigation)
+        // Execute: Call startup (simulating back button navigation)
         try {
-            $plugin->startup_handler(['task' => 'mail']);
+            $plugin->startup(['task' => 'mail']);
             $this->fail('Expected redirect exception was not thrown');
         } catch (DuoAuthTestRedirectException $e) {
             // Verify redirect to login
@@ -112,7 +124,7 @@ class DuoAuthTest extends TestCase
         $plugin->init();
         
         // Should NOT throw redirect exception
-        $result = $plugin->startup_handler(['task' => 'mail']);
+        $result = $plugin->startup(['task' => 'mail']);
         
         // Should pass through normally
         $this->assertIsArray($result);
@@ -140,7 +152,7 @@ class DuoAuthTest extends TestCase
         $plugin->init();
         
         // Should NOT throw redirect exception
-        $result = $plugin->startup_handler(['task' => 'login', 'action' => 'plugin.duo_callback']);
+        $result = $plugin->startup(['task' => 'login', 'action' => 'plugin.duo_callback']);
         
         $this->assertIsArray($result);
         $this->assertFalse($rc->killed_session);
@@ -161,7 +173,7 @@ class DuoAuthTest extends TestCase
         $plugin = new duo_auth($rc);
         $plugin->init();
         
-        $result = $plugin->startup_handler(['task' => 'login']);
+        $result = $plugin->startup(['task' => 'login']);
         
         $this->assertIsArray($result);
         $this->assertFalse($rc->killed_session);
@@ -187,7 +199,7 @@ class DuoAuthTest extends TestCase
         $plugin->init();
         
         // Should pass through - user is bypassed
-        $result = $plugin->startup_handler(['task' => 'mail']);
+        $result = $plugin->startup(['task' => 'mail']);
         
         $this->assertIsArray($result);
         $this->assertFalse($rc->killed_session);
@@ -213,7 +225,7 @@ class DuoAuthTest extends TestCase
         $plugin = new duo_auth($rc);
         $plugin->init();
         
-        $result = $plugin->startup_handler(['task' => 'mail']);
+        $result = $plugin->startup(['task' => 'mail']);
         
         $this->assertIsArray($result);
         $this->assertFalse($rc->killed_session);
@@ -241,7 +253,7 @@ class DuoAuthTest extends TestCase
         $plugin = new duo_auth($rc);
         $plugin->init();
         
-        $result = $plugin->startup_handler(['task' => 'mail']);
+        $result = $plugin->startup(['task' => 'mail']);
         
         $this->assertIsArray($result);
         $this->assertFalse($rc->killed_session);
@@ -266,7 +278,7 @@ class DuoAuthTest extends TestCase
         $plugin = new duo_auth($rc);
         $plugin->init();
         
-        $result = $plugin->startup_handler(['task' => 'mail']);
+        $result = $plugin->startup(['task' => 'mail']);
         
         $this->assertIsArray($result);
         $this->assertFalse($rc->killed_session);
@@ -301,7 +313,7 @@ class DuoAuthTest extends TestCase
         
         // Session is expired, so user should be blocked
         try {
-            $plugin->startup_handler(['task' => 'mail']);
+            $plugin->startup(['task' => 'mail']);
             $this->fail('Expected redirect exception for expired session');
         } catch (DuoAuthTestRedirectException $e) {
             $this->assertEquals('login', $rc->output->redirected_to['_task']);

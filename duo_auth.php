@@ -1,12 +1,12 @@
 <?php
 /**
  * Duo Security Plugin for Roundcube
- * Version: 2.0.1
+ * Version: 2.0.5
  * 
  * Supports: Global User Bypass, Global IP Bypass, and User-Specific IP Bypass
  * Features: IPv4/IPv6 support, Proxy detection, Failmode, Comprehensive logging
  * 
- * Security Fix: Added startup hook to prevent back-button bypass (CVE-2025-XXXXX)
+ * Security Fix: Added startup hook to prevent back-button bypass
  */
 
 declare(strict_types=1);
@@ -31,18 +31,18 @@ class duo_auth extends rcube_plugin
         $this->debug_mode = $this->rc->config->get('duo_log_level') === 'debug';
         
         // Register hooks
-        $this->add_hook('startup', [$this, 'startup_handler']);  // SECURITY FIX: Check for incomplete Duo auth
-        $this->add_hook('login_after', [$this, 'login_handler']);
-        $this->register_action('plugin.duo_callback', [$this, 'callback_handler']);
+        $this->add_hook('startup', [$this, 'startup']);
+        $this->add_hook('login_after', [$this, 'login_after']);
+        $this->add_hook('logout_after', [$this, 'logout_after']);
         
-        // Optional: Add hook for logout to clear Duo session data
-        $this->add_hook('logout_after', [$this, 'logout_handler']);
+        // Register callback action
+        $this->register_action('plugin.duo_callback', [$this, 'callback_handler']);
         
         $this->log('info', 'Duo Auth plugin initialized');
     }
 
     /**
-     * SECURITY FIX: Startup handler to check for incomplete Duo authentication
+     * SECURITY FIX: Startup hook to check for incomplete Duo authentication
      * 
      * This prevents the back-button bypass where a user could:
      * 1. Login with username/password (session created)
@@ -53,7 +53,7 @@ class duo_auth extends rcube_plugin
      * This hook runs on every request and ensures that if Duo auth was initiated,
      * it must be completed before the user can access any resources.
      */
-    public function startup_handler(array $args): array
+    public function startup(array $args): array
     {
         // Skip check for login task and duo callback action
         $task = $this->rc->task ?? '';
@@ -161,7 +161,7 @@ class duo_auth extends rcube_plugin
     /**
      * Handle post-login Duo authentication
      */
-    public function login_handler(array $args): array
+    public function login_after(array $args): array
     {
         // Check if Duo is enabled
         $enabled = $this->rc->config->get('duo_enabled', true);
@@ -371,7 +371,7 @@ class duo_auth extends rcube_plugin
     /**
      * Handle logout - cleanup Duo session data
      */
-    public function logout_handler(array $args): array
+    public function logout_after(array $args): array
     {
         $this->log('debug', 'Logout handler - cleaning up Duo session');
         $this->cleanup_duo_session();
