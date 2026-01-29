@@ -1,6 +1,6 @@
 # Roundcube lmr/duo_auth
 
-[![Version](https://img.shields.io/badge/version-2.0.4-blue.svg)](https://github.com/leonardomarino/duo_auth)
+[![Version](https://img.shields.io/badge/version-2.0.5-blue.svg)](https://github.com/leonardomarino/duo_auth)
 [![License](https://img.shields.io/badge/license-GPL--3.0--or--later-green.svg)](LICENSE)
 [![PHP](https://img.shields.io/badge/php-%3E%3D7.4-purple.svg)](https://php.net)
 
@@ -10,7 +10,7 @@ This is a Roundcube webmail plugin that enables [Duo Security](https://duo.com) 
 
 It redirects to Duo's secure authentication page after successful username/password authentication, requiring a 2nd Factor of Authentication using Duo Security (push, SMS, call, hardware token code).
 
-## 🚀 What's New in v2.0.4
+## 🚀 What's New in v2.0.5
 
 - **Duo Universal Prompt** - Modern, accessible authentication experience
 - **Enhanced Security** - OIDC/OAuth 2.0 based authentication flow
@@ -20,6 +20,7 @@ It redirects to Duo's secure authentication page after successful username/passw
 - **Failmode Options** - Choose between secure (block) or open (allow) on Duo service failure
 - **Comprehensive Logging** - Configurable log levels for debugging
 - **PHP 8.2 Ready** - Full compatibility with modern PHP versions
+- **Security Fix: Back-Button Bypass** - A critical authentication bypass allowed users to skip Duo two-factor authentication by pressing the browser back button after being redirected to Duo.
 
 ## INSTALLATION
 ============
