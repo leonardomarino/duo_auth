@@ -1,12 +1,12 @@
 <?php
 /**
  * Duo Security Plugin for Roundcube
- * Version: 2.0.5
- * 
+ * Version: 2.0.6
+ *
  * Supports: Global User Bypass, Global IP Bypass, and User-Specific IP Bypass
  * Features: IPv4/IPv6 support, Proxy detection, Failmode, Comprehensive logging
- * 
- * Security Fix: Added startup hook to prevent back-button bypass
+ *
+ * Security: startup() guard hardened; CIDR bounds and IPv4-mapped IPv6 fixed
  */
 
 declare(strict_types=1);
@@ -59,13 +59,14 @@ class duo_auth extends rcube_plugin
         $task = $this->rc->task ?? '';
         $action = $this->rc->action ?? '';
         
-        // Allow the callback handler to process
-        if ($action === 'plugin.duo_callback') {
+        // Allow the callback handler to process — scoped to login task only
+        if ($action === 'plugin.duo_callback' && ($task === 'login' || $task === '')) {
             return $args;
         }
-        
-        // Allow login page itself
+
+        // Allow login page itself; proactively clear any stale pending state
         if ($task === 'login' && $action !== 'login') {
+            $this->cleanup_duo_session();
             return $args;
         }
         
@@ -356,14 +357,12 @@ class duo_auth extends rcube_plugin
 
         } catch (DuoException $e) {
             $this->log('error', "Duo Callback Error: " . $e->getMessage());
-            $this->cleanup_duo_session();
             $this->fail_login($this->rc->config->get(
                 'duo_msg_failed',
                 'Two-factor authentication failed. Please try again.'
             ));
         } catch (Exception $e) {
             $this->log('error', "Unexpected Callback Error: " . $e->getMessage());
-            $this->cleanup_duo_session();
             $this->fail_login('An unexpected error occurred during authentication.');
         }
     }
@@ -465,7 +464,14 @@ class duo_auth extends rcube_plugin
             $ip = $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0';
             $this->log('debug', "IP from REMOTE_ADDR: $ip");
         }
-        
+
+        // Normalize IPv4-mapped IPv6 (e.g. ::ffff:192.168.1.1 → 192.168.1.1)
+        // so that IPv4 CIDR bypass rules match correctly under dual-stack setups.
+        if (preg_match('/^::ffff:(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})$/i', $ip, $m)) {
+            $ip = $m[1];
+            $this->log('debug', "Normalized IPv4-mapped IPv6 to: $ip");
+        }
+
         return $ip;
     }
 
@@ -503,38 +509,48 @@ class duo_auth extends rcube_plugin
     private function ip_in_cidr(string $ip, string $cidr): bool
     {
         [$subnet, $bits] = explode('/', $cidr);
-        
+        $bits = (int)$bits;
+
         // IPv4
-        if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) && 
+        if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) &&
             filter_var($subnet, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4)) {
-            $mask = -1 << (32 - (int)$bits);
+            if ($bits < 0 || $bits > 32) {
+                return false;
+            }
+            $mask = $bits === 0 ? 0 : (-1 << (32 - $bits));
             return (ip2long($ip) & $mask) === (ip2long($subnet) & $mask);
         }
-        
+
         // IPv6
-        if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV6) && 
+        if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV6) &&
             filter_var($subnet, FILTER_VALIDATE_IP, FILTER_FLAG_IPV6)) {
+            if ($bits < 0 || $bits > 128) {
+                return false;
+            }
             $subnet_bin = inet_pton($subnet);
-            $ip_bin = inet_pton($ip);
-            
-            $bytes_to_check = intdiv((int)$bits, 8);
-            $bits_to_check = (int)$bits % 8;
-            
+            $ip_bin     = inet_pton($ip);
+            if ($subnet_bin === false || $ip_bin === false) {
+                return false;
+            }
+
+            $bytes_to_check = intdiv($bits, 8);
+            $bits_to_check  = $bits % 8;
+
             for ($i = 0; $i < $bytes_to_check; $i++) {
                 if ($subnet_bin[$i] !== $ip_bin[$i]) {
                     return false;
                 }
             }
-            
-            if ($bits_to_check > 0 && $bytes_to_check < 16) {
+
+            if ($bits_to_check > 0) {
                 $mask = 0xFF << (8 - $bits_to_check);
-                return (ord($subnet_bin[$bytes_to_check]) & $mask) === 
+                return (ord($subnet_bin[$bytes_to_check]) & $mask) ===
                        (ord($ip_bin[$bytes_to_check]) & $mask);
             }
-            
+
             return true;
         }
-        
+
         return false;
     }
 
