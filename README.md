@@ -1,6 +1,6 @@
 # Roundcube lmr/duo_auth
 
-[![Version](https://img.shields.io/badge/version-2.0.5-blue.svg)](https://github.com/leonardomarino/duo_auth)
+[![Version](https://img.shields.io/badge/version-2.0.6-blue.svg)](https://github.com/leonardomarino/duo_auth)
 [![License](https://img.shields.io/badge/license-GPL--3.0--or--later-green.svg)](LICENSE)
 [![PHP](https://img.shields.io/badge/php-%3E%3D7.4-purple.svg)](https://php.net)
 
@@ -10,17 +10,13 @@ This is a Roundcube webmail plugin that enables [Duo Security](https://duo.com) 
 
 It redirects to Duo's secure authentication page after successful username/password authentication, requiring a 2nd Factor of Authentication using Duo Security (push, SMS, call, hardware token code).
 
-## 🚀 What's New in v2.0.5
+## 🚀 What's New in v2.0.6
 
-- **Duo Universal Prompt** - Modern, accessible authentication experience
-- **Enhanced Security** - OIDC/OAuth 2.0 based authentication flow
-- **Flexible Bypass System** - Three-tier bypass logic (global user, global IP, conditional)
-- **IPv4/IPv6 Support** - Full CIDR notation support for IP whitelisting
-- **Proxy Detection** - Configurable proxy header trust
-- **Failmode Options** - Choose between secure (block) or open (allow) on Duo service failure
-- **Comprehensive Logging** - Configurable log levels for debugging
-- **PHP 8.2 Ready** - Full compatibility with modern PHP versions
-- **Security Fix: Back-Button Bypass** - A critical authentication bypass allowed users to skip Duo two-factor authentication by pressing the browser back button after being redirected to Duo.
+- **IPv4-mapped IPv6 normalization** - Dual-stack deployments (PHP-FPM/Apache) no longer silently fail CIDR bypass matching when `REMOTE_ADDR` is presented as `::ffff:x.x.x.x`
+- **CIDR prefix bounds validation** - Invalid prefix lengths (e.g. `/200` on an IPv6 range) now return `false` immediately rather than producing undefined index behavior in the byte loop
+- **Tightened startup() callback exemption** - The `plugin.duo_callback` action exemption is now scoped to the login task, closing a surface where a crafted `_action` parameter on a non-login task could suppress the pending-auth guard
+- **Single cleanup ownership** - `fail_login()` is now the sole authoritative caller of `cleanup_duo_session()` on error paths; redundant calls removed from catch blocks
+- **Proactive stale-state removal** - `duo_state` is cleared immediately when the user returns to the login page, rather than persisting until the next protected-task request
 
 ## INSTALLATION
 ============
@@ -166,6 +162,16 @@ This project is licensed under the GPL-3.0-or-later License - see the [LICENSE](
 
 ## CHANGELOG
 =========
+
+### v2.0.6 (2026-04-11)
+- IPv4-mapped IPv6 normalization in `get_client_ip()` for dual-stack CIDR bypass correctness
+- CIDR prefix length bounds checks in `ip_in_cidr()` (max 32 for IPv4, 128 for IPv6)
+- `startup()` callback exemption scoped to login task only
+- Proactive `duo_state` cleanup on login page early-return
+- Redundant `cleanup_duo_session()` calls removed from `callback_handler()` catch blocks
+
+### v2.0.5 (2026)
+- Security fix: back-button bypass — startup hook enforces Duo completion on every request
 
 ### v2.0.4 (2025)
 - Complete rewrite for Duo Universal Prompt (Web SDK v4)
