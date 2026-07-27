@@ -32,3 +32,6 @@ composer.lock
 *.bak
 *.old
 *.bk
+
+# Local Claude Code context
+CLAUDE.md
