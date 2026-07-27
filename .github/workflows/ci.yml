@@ -14,31 +14,23 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # Roundcube 1.5.x with PHP 7.4-8.1
-          - php-version: '7.4'
-            roundcube-version: '1.5.8'
+          # Roundcube 1.6.x (LTS) with PHP 8.0-8.2
           - php-version: '8.0'
-            roundcube-version: '1.5.8'
+            roundcube-version: '1.6.17'
           - php-version: '8.1'
-            roundcube-version: '1.5.8'
-          
-          # Roundcube 1.6.x with PHP 8.0-8.2
-          - php-version: '8.0'
-            roundcube-version: '1.6.9'
-          - php-version: '8.1'
-            roundcube-version: '1.6.9'
+            roundcube-version: '1.6.17'
           - php-version: '8.2'
-            roundcube-version: '1.6.9'
-          
-          # Roundcube 1.7-beta with PHP 8.1-8.4
+            roundcube-version: '1.6.17'
+
+          # Roundcube 1.7.x with PHP 8.1-8.4
           - php-version: '8.1'
-            roundcube-version: '1.7-beta2'
+            roundcube-version: '1.7.2'
           - php-version: '8.2'
-            roundcube-version: '1.7-beta2'
+            roundcube-version: '1.7.2'
           - php-version: '8.3'
-            roundcube-version: '1.7-beta2'
+            roundcube-version: '1.7.2'
           - php-version: '8.4'
-            roundcube-version: '1.7-beta2'
+            roundcube-version: '1.7.2'
 
     name: PHP ${{ matrix.php-version }} - RC ${{ matrix.roundcube-version }}
 
@@ -102,7 +94,7 @@ jobs:
         # Check if composer.json exists in plugin
         if [ -f "composer.json" ]; then
           # For older PHP/Roundcube versions, we might need to adjust dependencies
-          if [[ "${{ matrix.php-version }}" == "7.4" ]] || [[ "${{ matrix.php-version }}" == "8.0" ]]; then
+          if [[ "${{ matrix.php-version }}" == "8.0" ]]; then
             # Ensure compatibility with older PHP versions if needed
             composer config platform.php ${{ matrix.php-version }}
           fi
@@ -199,9 +191,10 @@ jobs:
       run: |
         echo "=== Running PHP syntax checks ==="
         
-        # Check all PHP files in the plugin
+        # Check the plugin's own PHP files (vendor/ ships third-party code that
+        # may use newer PHP syntax than the matrix version and isn't ours to lint)
         error_count=0
-        for file in $(find roundcube/plugins/duo_auth -name "*.php" -type f); do
+        for file in $(find roundcube/plugins/duo_auth -name "*.php" -type f -not -path "*/vendor/*"); do
           if ! php -l "$file" > /dev/null 2>&1; then
             echo "Syntax error in: $file"
             php -l "$file"

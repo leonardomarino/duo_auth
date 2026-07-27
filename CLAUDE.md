@@ -12,7 +12,7 @@
 - **Enable Plugin:** Add `'duo_auth'` to `$config['plugins']` in Roundcube's `config/config.inc.php`.
 
 ## Code Style & Architecture
-- **PHP Version:** >= 7.4 (8.2+ recommended).
+- **PHP Version:** >= 8.0 (8.2+ recommended).
 - **Style:** Follow standard Roundcube plugin conventions (Hooks: `authenticate`, `login_after`, `render_page`).
 - **Configuration:** Always use `config.inc.php` based on `config.inc.php.dist`.
 - **Security Logic:** - The Duo session is stateful and relies on OIDC/OAuth 2.0.

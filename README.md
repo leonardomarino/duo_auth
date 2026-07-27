@@ -2,7 +2,7 @@
 
 [![Version](https://img.shields.io/badge/version-2.0.6-blue.svg)](https://github.com/leonardomarino/duo_auth)
 [![License](https://img.shields.io/badge/license-GPL--3.0--or--later-green.svg)](LICENSE)
-[![PHP](https://img.shields.io/badge/php-%3E%3D7.4-purple.svg)](https://php.net)
+[![PHP](https://img.shields.io/badge/php-%3E%3D8.0-purple.svg)](https://php.net)
 
 This is a Roundcube webmail plugin that enables [Duo Security](https://duo.com) Two Factor Authentication using the modern Universal Prompt.
 
@@ -23,8 +23,8 @@ It redirects to Duo's secure authentication page after successful username/passw
 
 ### Prerequisites
 
-- PHP 7.4 or higher (PHP 8.x supported)
-- Roundcube 1.4.0 or higher
+- PHP 8.0 or higher
+- Roundcube 1.6.0 or higher
 - Composer
 - Duo Security account with Admin API access
 

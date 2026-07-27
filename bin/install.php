@@ -12,9 +12,9 @@ echo "=========================================\n\n";
 
 // Check PHP version
 echo "Checking PHP version... ";
-if (version_compare(PHP_VERSION, '7.4.0', '<')) {
+if (version_compare(PHP_VERSION, '8.0.0', '<')) {
     echo "FAILED\n";
-    die("Error: PHP 7.4 or higher is required. You have PHP " . PHP_VERSION . "\n");
+    die("Error: PHP 8.0 or higher is required. You have PHP " . PHP_VERSION . "\n");
 }
 echo "OK (PHP " . PHP_VERSION . ")\n";
 
