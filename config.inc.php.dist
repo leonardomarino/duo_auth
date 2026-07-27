@@ -72,6 +72,8 @@ $config['duo_bypass_rules'] = [
 $config['duo_msg_unavailable'] = 'Two-factor authentication service is temporarily unavailable.';
 $config['duo_msg_failed'] = 'Two-factor authentication failed. Please try again.';
 $config['duo_msg_bypass'] = 'Two-factor authentication bypassed for this session.';
+$config['duo_msg_incomplete'] = 'Two-factor authentication was not completed. Please login again.';
+$config['duo_msg_required'] = 'Two-factor authentication is required.';
 
 // Proxy settings (if behind reverse proxy)
 $config['duo_trust_proxy_headers'] = false; // Set to true if behind proxy

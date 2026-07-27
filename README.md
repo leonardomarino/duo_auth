@@ -118,7 +118,7 @@ If upgrading from the legacy iframe-based version:
 
 ### Check Logs
 ```bash
-tail -f plugins/duo_auth/logs/duo_auth.log
+tail -f logs/duo_auth.log
 ```
 
 ### Test Configuration
@@ -188,7 +188,7 @@ This project is licensed under the GPL-3.0-or-later License - see the [LICENSE](
 - IPv4 CIDR matching by Johnson Chow
 - User-specific 2FA override
 
-### v1.0.3 (2020)
+### v1.0.3 (2017)
 - Roundcube 1.3.0 compatibility by Leonardo Mariño-Ramírez
 
 ### v1.0.0 (2019)
