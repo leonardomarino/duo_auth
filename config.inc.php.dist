@@ -26,7 +26,8 @@ $config['duo_enabled'] = true;
 // Use 'open' only for initial testing, never in production.
 $config['duo_failmode'] = 'secure';
 
-// Timeout for Duo API calls (seconds)
+// Time allowed between the password login and the Duo callback (seconds).
+// Users must finish the Duo prompt within this window. Default if unset: 300.
 $config['duo_timeout'] = 60;
 
 // Session timeout after successful Duo auth (seconds)
