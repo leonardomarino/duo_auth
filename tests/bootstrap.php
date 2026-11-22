@@ -8,7 +8,7 @@
 require_once __DIR__ . '/../vendor/autoload.php';
 
 // 1. Mock the parent 'rcube_plugin' class if Roundcube isn't actually loaded
-if (!class_exists('rcube_plugin')) {
+if (!class_exists('rcube_plugin', false)) {
     class rcube_plugin {
         public $task;
         protected $api;
@@ -22,7 +22,7 @@ if (!class_exists('rcube_plugin')) {
 }
 
 // 2. Mock the main 'rcube' singleton
-if (!class_exists('rcube')) {
+if (!class_exists('rcube', false)) {
     class rcube {
         public static $instance;
         public $config;
