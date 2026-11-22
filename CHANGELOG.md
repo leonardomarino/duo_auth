@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.8] - 2026-11-21
+
+Documentation-only release; no code changes.
+
+### Changed
+
+- README restructured for consistency: fixed broken heading underlines, split Composer and manual install, documented the reverse-proxy settings (`duo_trusted_proxies`, `duo_proxy_header`) and `config.inc.php` permissions for both install paths, added upgrade notes for v2.0.6 and earlier, and aligned changelog dates with this file.
+- README: the prerequisite is a Duo **Web SDK** application, not Admin API access.
+- README: the v1.x migration steps no longer suggest `duo_failmode = 'open'` outside a test instance.
+- README: removed the `session.save_handler = files` advice; Roundcube uses its own session handler.
+- README: troubleshooting entries now quote the Duo SDK's actual error messages.
+- `config.inc.php.dist`: `duo_timeout` is the window for completing the Duo prompt, not an API call timeout.
+
 ## [2.0.7] - 2026-11-21
 
 ### Security
