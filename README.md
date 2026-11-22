@@ -71,9 +71,13 @@ $config['duo_redirect_uri'] = 'https://your-domain.com/roundcube/?_task=login&_a
 $config['duo_bypass_users'] = ['service_account'];  // Users who always skip Duo
 $config['duo_bypass_ips'] = ['192.168.1.0/24'];    // IPs where everyone skips Duo
 $config['duo_bypass_rules'] = [                     // Conditional bypasses
-    'admin' => ['127.0.0.1', '::1'],
+    'admin' => ['192.168.1.10'],
 ];
 ```
+
+> **Security notes**
+> - Behind a reverse proxy, do not put the proxy's address (often `127.0.0.1`) in any bypass list: every request comes from it. Set `duo_trust_proxy_headers`, `duo_trusted_proxies` and `duo_proxy_header` instead.
+> - In the Duo Admin Panel, set the application's **New User Policy** to **Deny**. Usernames are lowercased before being sent to Duo; if your IMAP server accepts other variants (e.g. with and without `@domain`), make sure each maps to an enrolled Duo user or is rejected.
 
 ### 2. Configure PHP Session
 

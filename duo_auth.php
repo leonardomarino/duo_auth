@@ -64,8 +64,10 @@ class duo_auth extends rcube_plugin
             return $args;
         }
 
-        // Allow login page itself; proactively clear any stale pending state
-        if ($task === 'login' && $action !== 'login') {
+        // Allow the bare login page; proactively clear any stale pending state.
+        // Other login-task actions (e.g. from other plugins) fall through to the
+        // checks below so a password-only session cannot reach them.
+        if ($task === 'login' && $action === '') {
             $this->cleanup_duo_session();
             return $args;
         }
@@ -90,8 +92,10 @@ class duo_auth extends rcube_plugin
             exit;
         }
         
-        // For authenticated sessions (non-login tasks), verify Duo was completed
-        if ($task !== 'login' && $this->rc->user && $this->rc->user->ID) {
+        // For authenticated sessions, verify Duo was completed. The login form
+        // POST is exempt: Roundcube kills any existing session before re-login.
+        $is_login_post = ($task === 'login' && $action === 'login');
+        if (!$is_login_post && $this->rc->user && $this->rc->user->ID) {
             // User appears logged in - check if Duo is required and was completed
             if (!$this->is_duo_authenticated() && $this->is_duo_required_for_session()) {
                 $username = $this->rc->user->get_username() ?? 'unknown';
@@ -132,12 +136,11 @@ class duo_auth extends rcube_plugin
             return false;
         }
         
-        $username = $this->rc->user ? $this->rc->user->get_username() : null;
+        $username = $this->get_username();
         $user_ip = $this->get_client_ip();
         
         // Check global user bypass
-        $global_users = $this->rc->config->get('duo_bypass_users', []);
-        if ($username && in_array($username, $global_users, true)) {
+        if ($username && in_array($username, $this->get_bypass_users(), true)) {
             return false;
         }
         
@@ -148,11 +151,8 @@ class duo_auth extends rcube_plugin
         }
         
         // Check conditional bypass
-        $rules_map = $this->rc->config->get('duo_bypass_rules', []);
-        if ($username && isset($rules_map[$username])) {
-            if ($this->is_ip_whitelisted($user_ip, $rules_map[$username])) {
-                return false;
-            }
+        if ($username && $this->is_ip_whitelisted($user_ip, $this->get_bypass_rule_ips($username))) {
+            return false;
         }
         
         // Duo is required
@@ -174,7 +174,7 @@ class duo_auth extends rcube_plugin
         }
 
         // Get username from various possible sources
-        $username = $this->get_username($args);
+        $username = $this->get_username();
         if (!$username) {
             $this->log('error', 'Unable to determine username for Duo auth');
             return $args;
@@ -196,8 +196,7 @@ class duo_auth extends rcube_plugin
         // ====================================================================
         
         // 1. Global User Bypass (User skips Duo from any location)
-        $global_users = $this->rc->config->get('duo_bypass_users', []);
-        if ($username && in_array($username, $global_users, true)) {
+        if (in_array($username, $this->get_bypass_users(), true)) {
             $this->log('info', "Bypassing Duo: Global user bypass for '$username'");
             $this->set_duo_authenticated($username, 'global_user_bypass');
             $this->show_bypass_message();
@@ -214,9 +213,8 @@ class duo_auth extends rcube_plugin
         }
 
         // 3. Conditional Bypass (Specific user from specific IP)
-        $rules_map = $this->rc->config->get('duo_bypass_rules', []);
-        if ($username && isset($rules_map[$username])) {
-            $allowed_ips = $rules_map[$username];
+        $allowed_ips = $this->get_bypass_rule_ips($username);
+        if (!empty($allowed_ips)) {
             if ($this->is_ip_whitelisted($user_ip, $allowed_ips)) {
                 $this->log('info', "Bypassing Duo: Conditional bypass for '$username' from IP '$user_ip'");
                 $this->set_duo_authenticated($username, 'conditional_bypass');
@@ -401,77 +399,125 @@ class duo_auth extends rcube_plugin
     }
 
     /**
-     * Get username from various sources
+     * Get the authenticated username, canonicalized
+     *
+     * Only server-side sources are used. The login_after hook args are built
+     * from the client-supplied _url POST field and must never be trusted.
      */
-    private function get_username(array $args): ?string
+    private function get_username(): ?string
     {
-        // Try various sources for username
-        $username = $args['user'] ?? 
-                   $args['username'] ?? 
-                   $_SESSION['username'] ?? 
-                   null;
-        
-        if (!$username) {
-            $username = rcube_utils::get_input_value('_user', rcube_utils::INPUT_POST);
-        }
-        
-        if (!$username && $this->rc->user && $this->rc->user->ID) {
+        $username = null;
+        if ($this->rc->user && $this->rc->user->ID) {
             $username = $this->rc->user->get_username();
         }
-        
-        return $username;
+        if (!$username) {
+            $username = $_SESSION['username'] ?? null;
+        }
+        return $this->normalize_username($username);
+    }
+
+    /**
+     * Canonicalize a username (trim + lowercase) so case variants accepted by
+     * the IMAP server map to one Duo identity and one bypass-list entry.
+     */
+    private function normalize_username(?string $username): ?string
+    {
+        $username = trim((string)$username);
+        if ($username === '') {
+            return null;
+        }
+        return function_exists('mb_strtolower') ? mb_strtolower($username, 'UTF-8') : strtolower($username);
+    }
+
+    /**
+     * duo_bypass_users, normalized
+     */
+    private function get_bypass_users(): array
+    {
+        return array_filter(array_map(
+            fn($u) => $this->normalize_username((string)$u),
+            $this->rc->config->get('duo_bypass_users', [])
+        ));
+    }
+
+    /**
+     * IP list from duo_bypass_rules for a (normalized) username
+     */
+    private function get_bypass_rule_ips(string $username): array
+    {
+        $ips = [];
+        foreach ($this->rc->config->get('duo_bypass_rules', []) as $user => $list) {
+            if ($this->normalize_username((string)$user) === $username) {
+                $ips = array_merge($ips, (array)$list);
+            }
+        }
+        return $ips;
     }
 
     /**
      * Get client IP with proxy support
+     *
+     * Proxy headers are honored only when the direct peer (REMOTE_ADDR) is in
+     * duo_trusted_proxies. The configured header is walked right-to-left,
+     * skipping trusted proxy hops; the first untrusted hop is the client.
+     * Left-most entries are client-controlled and are never trusted blindly.
      */
     private function get_client_ip(): string
     {
-        $ip = '0.0.0.0';
-        
-        // Check if we should trust proxy headers
-        $trust_proxy = $this->rc->config->get('duo_trust_proxy_headers', false);
+        $remote_addr = $this->normalize_ip($_SERVER['REMOTE_ADDR'] ?? '0.0.0.0');
+
+        if (!$this->rc->config->get('duo_trust_proxy_headers', false)) {
+            return $remote_addr;
+        }
+
         $trusted_proxies = $this->rc->config->get('duo_trusted_proxies', []);
-        
-        if ($trust_proxy) {
-            // Check various proxy headers
-            $proxy_headers = [
-                'HTTP_CF_CONNECTING_IP',     // Cloudflare
-                'HTTP_X_FORWARDED_FOR',       // Standard proxy
-                'HTTP_X_REAL_IP',             // Nginx proxy
-                'HTTP_CLIENT_IP',             // Some proxies
-                'HTTP_X_CLUSTER_CLIENT_IP',  // Cluster setups
-            ];
-            
-            foreach ($proxy_headers as $header) {
-                if (!empty($_SERVER[$header])) {
-                    $ips = array_map('trim', explode(',', $_SERVER[$header]));
-                    
-                    foreach ($ips as $possible_ip) {
-                        // Validate IP
-                        if (filter_var($possible_ip, FILTER_VALIDATE_IP)) {
-                            $this->log('debug', "IP detected from $header: $possible_ip");
-                            $ip = $possible_ip;
-                            break 2;
-                        }
-                    }
-                }
+        if (empty($trusted_proxies)) {
+            $this->log('warning', 'duo_trust_proxy_headers is enabled but duo_trusted_proxies is empty - ignoring proxy headers');
+            return $remote_addr;
+        }
+
+        if (!$this->is_ip_whitelisted($remote_addr, $trusted_proxies)) {
+            $this->log('debug', "REMOTE_ADDR $remote_addr is not a trusted proxy - ignoring proxy headers");
+            return $remote_addr;
+        }
+
+        // Accept either 'X-Forwarded-For' or 'HTTP_X_FORWARDED_FOR' style names
+        $header = strtoupper(str_replace('-', '_', $this->rc->config->get('duo_proxy_header', 'X-Forwarded-For')));
+        if (strpos($header, 'HTTP_') !== 0) {
+            $header = 'HTTP_' . $header;
+        }
+
+        if (empty($_SERVER[$header])) {
+            return $remote_addr;
+        }
+
+        $hops = array_reverse(array_map('trim', explode(',', $_SERVER[$header])));
+        $ip = $remote_addr;
+        foreach ($hops as $hop) {
+            if (!filter_var($hop, FILTER_VALIDATE_IP)) {
+                // A trusted proxy would not append garbage; stop at the last good hop
+                $this->log('warning', "Invalid entry in $header - using last trusted hop");
+                break;
+            }
+            $ip = $this->normalize_ip($hop);
+            if (!$this->is_ip_whitelisted($ip, $trusted_proxies)) {
+                break;
             }
         }
-        
-        // Fall back to REMOTE_ADDR
-        if ($ip === '0.0.0.0') {
-            $ip = $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0';
-            $this->log('debug', "IP from REMOTE_ADDR: $ip");
-        }
 
-        // Normalize IPv4-mapped IPv6 (e.g. ::ffff:192.168.1.1 → 192.168.1.1)
-        // so that IPv4 CIDR bypass rules match correctly under dual-stack setups.
+        $this->log('debug', "Client IP resolved via $header: $ip");
+        return $ip;
+    }
+
+    /**
+     * Normalize IPv4-mapped IPv6 (e.g. ::ffff:192.168.1.1 → 192.168.1.1)
+     * so that IPv4 CIDR rules match correctly under dual-stack setups.
+     */
+    private function normalize_ip(string $ip): string
+    {
         if (preg_match('/^::ffff:(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})$/i', $ip, $m)) {
-            $ip = $m[1];
-            $this->log('debug', "Normalized IPv4-mapped IPv6 to: $ip");
+            return $m[1];
         }
-
         return $ip;
     }
 
@@ -508,7 +554,14 @@ class duo_auth extends rcube_plugin
      */
     private function ip_in_cidr(string $ip, string $cidr): bool
     {
-        [$subnet, $bits] = explode('/', $cidr);
+        $parts = explode('/', $cidr);
+        // Reject malformed prefixes: (int) of '', 'abc' etc. is 0, which would
+        // match every address. /0 is rejected too - use duo_enabled = false instead.
+        if (count($parts) !== 2 || !ctype_digit($parts[1]) || (int)$parts[1] === 0) {
+            $this->log('warning', "Ignoring invalid or match-all CIDR range '$cidr'");
+            return false;
+        }
+        [$subnet, $bits] = $parts;
         $bits = (int)$bits;
 
         // IPv4

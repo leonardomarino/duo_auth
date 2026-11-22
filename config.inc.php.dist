@@ -46,11 +46,14 @@ $config['duo_bypass_users'] = [
 ];
 
 // IPs where EVERYONE skips Duo (e.g., internal office network)
+// WARNING: behind a reverse proxy on the same host (nginx -> Apache/php-fpm,
+// Docker), REMOTE_ADDR is the proxy's address for every request. Listing
+// 127.0.0.1 or the proxy's IP here would let ALL users skip Duo. Configure
+// the proxy settings below instead.
+// Malformed ranges (e.g. '10.0.0.0/') and /0 are rejected.
 $config['duo_bypass_ips'] = [
     // '192.168.1.0/24',   // Office network
     // '10.0.0.0/8',       // Private network
-    // '::1',              // IPv6 localhost
-    '127.0.0.1',           // IPv4 localhost
 ];
 
 // ============================================================================
@@ -76,7 +79,15 @@ $config['duo_msg_incomplete'] = 'Two-factor authentication was not completed. Pl
 $config['duo_msg_required'] = 'Two-factor authentication is required.';
 
 // Proxy settings (if behind reverse proxy)
+// Headers are honored ONLY when the request comes directly from an address in
+// duo_trusted_proxies (IPs or CIDR ranges). The header is read right-to-left,
+// skipping trusted hops, so client-supplied left-most entries are ignored.
+// If duo_trusted_proxies is empty, proxy headers are ignored.
 $config['duo_trust_proxy_headers'] = false; // Set to true if behind proxy
 $config['duo_trusted_proxies'] = [
+    // '127.0.0.1',    // Reverse proxy on the same host
     // '192.168.1.1',  // Your reverse proxy IP
 ];
+// Header carrying the client IP, e.g. 'X-Forwarded-For', 'X-Real-IP',
+// or 'CF-Connecting-IP' (Cloudflare). Make sure your proxy overwrites it.
+$config['duo_proxy_header'] = 'X-Forwarded-For';

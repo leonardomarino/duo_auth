@@ -5,6 +5,27 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Security
+
+- **CRITICAL**: The username used for Duo and for bypass checks could be chosen by the attacker. `login_after` hook args are built from the client-supplied `_url` POST field, and `get_username()` read `$args['user']` first, so `_url=user=<bypass user>` skipped Duo entirely, and `_url=user=<attacker's Duo user>` let an attacker approve the prompt on their own device. The username now comes only from the Roundcube user record (falling back to `$_SESSION['username']`); the raw `_user` POST fallback was removed too.
+- **CRITICAL**: Proxy headers could be spoofed to match `duo_bypass_ips`. `duo_trusted_proxies` was never checked, five headers were read, and the left-most (client-controlled) `X-Forwarded-For` entry was used. Headers are now honored only when `REMOTE_ADDR` is a trusted proxy, only the single header named by the new `duo_proxy_header` option is read, and it is walked right-to-left skipping trusted hops.
+- **CRITICAL**: `config.inc.php.dist` no longer ships `127.0.0.1` in `duo_bypass_ips`. Behind a same-host reverse proxy every request has that `REMOTE_ADDR`, so all users skipped Duo.
+- Malformed CIDR ranges (`10.0.0.0/`, `10.0.0.0/abc`) were cast to prefix `/0` and matched every address. Non-numeric, missing and `/0` prefixes are now rejected and logged.
+- Usernames are canonicalized (trimmed, lowercased) before bypass matching and before being sent to Duo, so case variants accepted by IMAP map to a single Duo identity.
+- `startup()` no longer lets every `_task=login` action through. Only the bare login page, the login POST and the Duo callback are exempt; other plugins' login-task actions now require completed Duo for logged-in sessions (anonymous visitors are unaffected).
+
+### Upgrade notes
+
+- If you set `duo_trust_proxy_headers = true`, you must now list your proxy in `duo_trusted_proxies` (IP or CIDR), and set `duo_proxy_header` if it isn't `X-Forwarded-For`. Otherwise headers are ignored and `REMOTE_ADDR` is used.
+- If your `config.inc.php` was copied from an older template, remove `127.0.0.1` from `duo_bypass_ips` unless you are certain no local proxy sits in front of Roundcube.
+- Usernames sent to Duo are now lowercase. In the Duo Admin Panel, set the application's **New User Policy** to **Deny** so unenrolled username variants cannot self-enroll.
+
+### Fixed
+
+- Test bootstrap autoloaded the real Roundcube classes from `vendor/`, so the mocks were never defined and the whole suite errored.
+
 ## [2.0.6] - 2026-04-11
 
 ### Fixed
