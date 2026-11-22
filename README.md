@@ -1,6 +1,6 @@
 # Roundcube lmr/duo_auth
 
-[![Version](https://img.shields.io/badge/version-2.0.8-blue.svg)](https://github.com/leonardomarino/duo_auth)
+[![Version](https://img.shields.io/badge/version-2.0.9-blue.svg)](https://github.com/leonardomarino/duo_auth)
 [![License](https://img.shields.io/badge/license-GPL--3.0--or--later-green.svg)](LICENSE)
 [![PHP](https://img.shields.io/badge/php-%3E%3D8.0-purple.svg)](https://php.net)
 
@@ -10,19 +10,18 @@ This is a Roundcube webmail plugin that enables [Duo Security](https://duo.com) 
 
 It redirects to Duo's secure authentication page after successful username/password authentication, requiring a 2nd Factor of Authentication using Duo Security (push, SMS, call, hardware token code).
 
-## What's New in v2.0.8
+## What's New in v2.0.9
 
-Documentation release. No code changes since v2.0.7.
+Security hardening release — all users should upgrade. See [CHANGELOG.md](CHANGELOG.md) for details and **upgrade notes** (manual installs: delete `plugins/duo_auth/vendor/` and run `composer install --no-dev`).
 
-v2.0.7 was a **security release — all users on v2.0.6 or earlier should upgrade**. See [CHANGELOG.md](CHANGELOG.md) for details and upgrade notes.
+- **No Roundcube copy in the web root** - manual installs no longer pull a full Roundcube into `plugins/duo_auth/vendor/`; a new `.htaccess` denies `vendor/`, `bin/` and `tests/`
+- **Configuration errors always fail secure** - `duo_failmode = 'open'` now applies only when Duo is unreachable
+- **Idle timeout** - `duo_session_timeout` resets on activity instead of logging everyone out 15 minutes after login
+- **Hardening** - constant-time state check, log-injection protection, optional bypass notice (`duo_msg_bypass = ''`)
+- **Packaging** - no PHP platform pin (correct dependencies on PHP 8.0/8.1); `duo_timeout` template default 300s
+- **CI** - read-only token, actions pinned to commit SHAs
 
-- **Username from server-side state only** - closes a Duo bypass via the client-supplied `_url` login field
-- **Trusted-proxy IP resolution** - proxy headers honored only from `duo_trusted_proxies`, one configurable header (`duo_proxy_header`), read right-to-left
-- **No default `127.0.0.1` bypass**, and malformed or `/0` CIDR ranges are rejected
-- **Usernames canonicalized**, Duo approval bound to the logged-in user, optional `duo_callback_ip_check`
-- **Login-task actions from other plugins** require completed Duo
-- **Installer** creates `config.inc.php` as `0640` and no longer creates a `logs/` dir in the web root
-- **Duo Universal SDK** `^1.2.0` required
+v2.0.7 closed several Duo bypasses ([GHSA-3xg2-jq85-4qfg](https://github.com/leonardomarino/duo_auth/security/advisories/GHSA-3xg2-jq85-4qfg)); upgrade from v2.0.6 or earlier.
 
 ## Installation
 
@@ -223,6 +222,11 @@ This project is licensed under the GPL-3.0-or-later License - see the [LICENSE](
 ## Changelog
 
 Full details in [CHANGELOG.md](CHANGELOG.md).
+
+### v2.0.9 (2026-11-21)
+- Security: manual installs no longer place a Roundcube copy in the web root; `.htaccess` denies `vendor/`, `bin/`, `tests/`
+- Config errors fail secure regardless of failmode; idle `duo_session_timeout`; constant-time state check; log-injection protection; optional bypass notice
+- Composer platform pin removed; `duo_timeout` template default 300s; CI least-privilege and SHA-pinned actions
 
 ### v2.0.8 (2026-11-21)
 - Documentation: README restructured and corrected; `config.inc.php.dist` comment for `duo_timeout` corrected
