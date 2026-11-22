@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- Removed `config.platform.php` (`8.2.0`) from `composer.json`. It made `composer install` inside the plugin directory (the manual install) resolve dependencies as if running PHP 8.2, so PHP 8.0/8.1 servers could get packages they can't run. Dependencies now resolve for the PHP version actually in use. Installs via `composer require` from the Roundcube root were not affected. CI no longer needs its per-matrix override.
+
 ## [2.0.8] - 2026-11-21
 
 Documentation-only release; no code changes.

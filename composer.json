@@ -84,9 +84,6 @@
         "sort-packages": true,
         "allow-plugins": {
             "roundcube/plugin-installer": true
-        },
-        "platform": {
-            "php": "8.2.0"
         }
     },
     "extra": {

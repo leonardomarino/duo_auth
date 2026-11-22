@@ -93,10 +93,6 @@ jobs:
         
         # Check if composer.json exists in plugin
         if [ -f "composer.json" ]; then
-          # composer.json pins platform.php to 8.2.0; resolve for the PHP
-          # version actually under test or 8.0/8.1 get 8.2-only packages
-          composer config platform.php ${{ matrix.php-version }}
-          
           composer install --prefer-dist --no-interaction --optimize-autoloader
         else
           echo "WARNING: No composer.json found in plugin directory"
