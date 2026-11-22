@@ -93,11 +93,9 @@ jobs:
         
         # Check if composer.json exists in plugin
         if [ -f "composer.json" ]; then
-          # For older PHP/Roundcube versions, we might need to adjust dependencies
-          if [[ "${{ matrix.php-version }}" == "8.0" ]]; then
-            # Ensure compatibility with older PHP versions if needed
-            composer config platform.php ${{ matrix.php-version }}
-          fi
+          # composer.json pins platform.php to 8.2.0; resolve for the PHP
+          # version actually under test or 8.0/8.1 get 8.2-only packages
+          composer config platform.php ${{ matrix.php-version }}
           
           composer install --prefer-dist --no-interaction --optimize-autoloader
         else
