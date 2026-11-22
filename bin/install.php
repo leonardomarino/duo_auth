@@ -25,7 +25,6 @@ $required_extensions = [
     'curl' => 'cURL for API calls',
     'openssl' => 'OpenSSL for encryption',
     'filter' => 'Filter functions for IP validation',
-    'sockets' => 'Socket functions for IPv6 support'
 ];
 
 $missing_extensions = [];

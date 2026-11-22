@@ -1,7 +1,7 @@
 <?php
 /**
  * Duo Security Plugin for Roundcube
- * Version: 2.0.8
+ * Version: 2.0.9
  *
  * Supports: Global User Bypass, Global IP Bypass, and User-Specific IP Bypass
  * Features: IPv4/IPv6 support, Proxy detection, Failmode, Comprehensive logging
@@ -231,39 +231,46 @@ class duo_auth extends rcube_plugin
         
         $this->log('info', "Duo authentication required for user '$username' from IP '$user_ip'");
         
+        // Configuration errors always block login, whatever duo_failmode says:
+        // a typo in the credentials must never silently disable 2FA.
         try {
-            // Initialize Duo client
             $duo_client = $this->get_duo_client();
-            
-            // Health check with failmode support
-            try {
-                $health = $duo_client->healthCheck();
-                if ($health['stat'] !== 'OK') {
-                    throw new DuoException("Duo Health Check Failed: " . json_encode($health));
-                }
-                $this->log('debug', 'Duo health check passed');
-            } catch (Exception $e) {
-                $this->log('error', "Duo Health Check Error: " . $e->getMessage());
-                
-                // Check failmode setting
-                $failmode = $this->rc->config->get('duo_failmode', 'secure');
-                if ($failmode === 'open') {
-                    $this->log('warning', "FAILMODE OPEN: Allowing login without Duo due to service unavailability");
-                    $this->rc->output->show_message(
-                        $this->rc->config->get('duo_msg_unavailable', 'Two-factor authentication unavailable - proceeding without'),
-                        'warning'
-                    );
-                    $this->set_duo_authenticated($username, 'failmode_open');
-                    return $args;
-                } else {
-                    $this->log('error', "FAILMODE SECURE: Blocking login due to Duo unavailability");
-                    $this->fail_login($this->rc->config->get(
-                        'duo_msg_unavailable',
-                        'Two-factor authentication service is unavailable. Please try again later.'
-                    ));
-                }
+        } catch (Exception $e) {
+            $this->log('error', "Duo configuration error: " . $e->getMessage());
+            $this->fail_login($this->rc->config->get(
+                'duo_msg_misconfigured',
+                'Two-factor authentication is not configured correctly. Please contact your administrator.'
+            ));
+        }
+
+        // Health check: only Duo being unreachable honors duo_failmode = 'open'
+        try {
+            $health = $duo_client->healthCheck();
+            if (($health['stat'] ?? null) !== 'OK') {
+                throw new DuoException("Duo Health Check Failed: " . json_encode($health));
+            }
+            $this->log('debug', 'Duo health check passed');
+        } catch (Exception $e) {
+            $this->log('error', "Duo Health Check Error: " . $e->getMessage());
+
+            if ($this->rc->config->get('duo_failmode', 'secure') === 'open') {
+                $this->log('warning', "FAILMODE OPEN: Allowing login without Duo due to service unavailability");
+                $this->rc->output->show_message(
+                    $this->rc->config->get('duo_msg_unavailable', 'Two-factor authentication unavailable - proceeding without'),
+                    'warning'
+                );
+                $this->set_duo_authenticated($username, 'failmode_open');
+                return $args;
             }
 
+            $this->log('error', "FAILMODE SECURE: Blocking login due to Duo unavailability");
+            $this->fail_login($this->rc->config->get(
+                'duo_msg_unavailable',
+                'Two-factor authentication service is unavailable. Please try again later.'
+            ));
+        }
+
+        try {
             // Generate state for CSRF protection
             $state = $duo_client->generateState();
             
@@ -284,15 +291,14 @@ class duo_auth extends rcube_plugin
             $this->rc->output->redirect($auth_url);
             exit;
 
-        } catch (DuoException $e) {
-            $this->log('error', "Duo Exception: " . $e->getMessage());
-            $this->handle_duo_error($e);
         } catch (Exception $e) {
-            $this->log('error', "Unexpected Exception: " . $e->getMessage());
-            $this->handle_duo_error($e);
+            // Duo is reachable but the request could not be built: fail secure
+            $this->log('error', "Duo Exception: " . $e->getMessage());
+            $this->fail_login($this->rc->config->get(
+                'duo_msg_unavailable',
+                'Two-factor authentication service is unavailable.'
+            ));
         }
-        
-        return $args;
     }
 
     /**
@@ -313,7 +319,7 @@ class duo_auth extends rcube_plugin
         $saved_time = $_SESSION['duo_timestamp'] ?? 0;
         
         $this->log('debug', "Callback data - Code present: " . ($code ? 'yes' : 'no') . 
-                            ", State match: " . ($state === $saved_state ? 'yes' : 'no'));
+                            ", State match: " . ($this->state_matches($state, $saved_state) ? 'yes' : 'no'));
         
         // Validate callback data
         if (!$code || !$state || !$saved_state || !$saved_user) {
@@ -322,7 +328,7 @@ class duo_auth extends rcube_plugin
         }
         
         // Verify state matches (CSRF protection)
-        if ($state !== $saved_state) {
+        if (!$this->state_matches($state, $saved_state)) {
             $this->log('error', 'State mismatch - possible CSRF attempt');
             $this->fail_login('Security check failed: Invalid state parameter.');
         }
@@ -633,18 +639,24 @@ class duo_auth extends rcube_plugin
             return false;
         }
 
+        // Idle timeout: expires after duo_session_timeout seconds without activity
         $timeout = $this->rc->config->get('duo_session_timeout', 900); // 15 minutes default
-        
-        // Check if authentication has timed out
-        if (isset($auth_data['timestamp'])) {
-            if ((time() - $auth_data['timestamp']) > $timeout) {
-                $this->log('info', 'Duo authentication session expired');
-                unset($_SESSION['duo_authenticated']);
-                return false;
-            }
+        if (!isset($auth_data['timestamp']) || (time() - $auth_data['timestamp']) > $timeout) {
+            $this->log('info', 'Duo authentication session expired');
+            unset($_SESSION['duo_authenticated']);
+            return false;
         }
-        
+
+        $_SESSION['duo_authenticated']['timestamp'] = time();
         return true;
+    }
+
+    /**
+     * Constant-time comparison of the callback state with the saved state
+     */
+    private function state_matches($state, $saved_state): bool
+    {
+        return is_string($state) && is_string($saved_state) && hash_equals($saved_state, $state);
     }
 
     /**
@@ -674,28 +686,6 @@ class duo_auth extends rcube_plugin
     }
 
     /**
-     * Handle Duo errors with failmode support
-     */
-    private function handle_duo_error(Exception $e): void
-    {
-        $failmode = $this->rc->config->get('duo_failmode', 'secure');
-        
-        if ($failmode === 'open') {
-            $this->log('warning', "FAILMODE OPEN: Allowing login despite Duo error: " . $e->getMessage());
-            $this->rc->output->show_message(
-                $this->rc->config->get('duo_msg_unavailable', 'Two-factor authentication unavailable - proceeding without'),
-                'warning'
-            );
-            // Don't exit, let login continue
-        } else {
-            $this->fail_login($this->rc->config->get(
-                'duo_msg_unavailable',
-                'Two-factor authentication service is unavailable.'
-            ));
-        }
-    }
-
-    /**
      * Fail login with message
      */
     private function fail_login(string $msg): never
@@ -713,8 +703,11 @@ class duo_auth extends rcube_plugin
      */
     private function show_bypass_message(): void
     {
+        // Set duo_msg_bypass to '' to avoid revealing that a bypass rule matched
         $msg = $this->rc->config->get('duo_msg_bypass', 'Two-factor authentication bypassed for this session.');
-        $this->rc->output->show_message($msg, 'notice');
+        if ($msg !== '' && $msg !== null && $msg !== false) {
+            $this->rc->output->show_message($msg, 'notice');
+        }
     }
 
     /**
@@ -732,6 +725,9 @@ class duo_auth extends rcube_plugin
         // Only log if message level >= configured level
         if (($levels[$level] ?? 1) >= ($levels[$log_level] ?? 1)) {
             $prefix = strtoupper($level);
+            // Usernames and headers are client-supplied: neutralize control
+            // characters so they can't forge or split log lines
+            $message = preg_replace('/[\x00-\x1F\x7F]/', '?', $message);
             rcube::write_log('duo_auth', "[$prefix] $message");
         }
     }
