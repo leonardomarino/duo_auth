@@ -1,6 +1,6 @@
 # Roundcube lmr/duo_auth
 
-[![Version](https://img.shields.io/badge/version-2.0.6-blue.svg)](https://github.com/leonardomarino/duo_auth)
+[![Version](https://img.shields.io/badge/version-2.0.7-blue.svg)](https://github.com/leonardomarino/duo_auth)
 [![License](https://img.shields.io/badge/license-GPL--3.0--or--later-green.svg)](LICENSE)
 [![PHP](https://img.shields.io/badge/php-%3E%3D8.0-purple.svg)](https://php.net)
 
@@ -10,13 +10,17 @@ This is a Roundcube webmail plugin that enables [Duo Security](https://duo.com) 
 
 It redirects to Duo's secure authentication page after successful username/password authentication, requiring a 2nd Factor of Authentication using Duo Security (push, SMS, call, hardware token code).
 
-## 🚀 What's New in v2.0.6
+## 🚀 What's New in v2.0.7
 
-- **IPv4-mapped IPv6 normalization** - Dual-stack deployments (PHP-FPM/Apache) no longer silently fail CIDR bypass matching when `REMOTE_ADDR` is presented as `::ffff:x.x.x.x`
-- **CIDR prefix bounds validation** - Invalid prefix lengths (e.g. `/200` on an IPv6 range) now return `false` immediately rather than producing undefined index behavior in the byte loop
-- **Tightened startup() callback exemption** - The `plugin.duo_callback` action exemption is now scoped to the login task, closing a surface where a crafted `_action` parameter on a non-login task could suppress the pending-auth guard
-- **Single cleanup ownership** - `fail_login()` is now the sole authoritative caller of `cleanup_duo_session()` on error paths; redundant calls removed from catch blocks
-- **Proactive stale-state removal** - `duo_state` is cleared immediately when the user returns to the login page, rather than persisting until the next protected-task request
+Security release — all users should upgrade. See [CHANGELOG.md](CHANGELOG.md) for details and upgrade notes.
+
+- **Username from server-side state only** - closes a Duo bypass via the client-supplied `_url` login field
+- **Trusted-proxy IP resolution** - proxy headers honored only from `duo_trusted_proxies`, one configurable header (`duo_proxy_header`), read right-to-left
+- **No default `127.0.0.1` bypass**, and malformed or `/0` CIDR ranges are rejected
+- **Usernames canonicalized**, Duo approval bound to the logged-in user, optional `duo_callback_ip_check`
+- **Login-task actions from other plugins** require completed Duo
+- **Installer** creates `config.inc.php` as `0640` and no longer creates a `logs/` dir in the web root
+- **Duo Universal SDK** `^1.2.0` required
 
 ## INSTALLATION
 ============
@@ -71,9 +75,16 @@ $config['duo_redirect_uri'] = 'https://your-domain.com/roundcube/?_task=login&_a
 $config['duo_bypass_users'] = ['service_account'];  // Users who always skip Duo
 $config['duo_bypass_ips'] = ['192.168.1.0/24'];    // IPs where everyone skips Duo
 $config['duo_bypass_rules'] = [                     // Conditional bypasses
-    'admin' => ['127.0.0.1', '::1'],
+    'admin' => ['192.168.1.10'],
 ];
 ```
+
+> **Security notes**
+> - Behind a reverse proxy, do not put the proxy's address (often `127.0.0.1`) in any bypass list: every request comes from it. Set `duo_trust_proxy_headers`, `duo_trusted_proxies` and `duo_proxy_header` instead.
+> - Keep `duo_failmode = 'secure'` in production. With `'open'`, anyone who can stop the server reaching Duo bypasses 2FA.
+> - Set Roundcube's `$config['ip_check'] = true;` to bind sessions to the client IP. `duo_callback_ip_check` does the same for the Duo login step.
+> - `config.inc.php` contains `duo_client_secret`: keep it at mode `0640`, owned by `root:<web server group>`.
+> - In the Duo Admin Panel, set the application's **New User Policy** to **Deny**. Usernames are lowercased before being sent to Duo; if your IMAP server accepts other variants (e.g. with and without `@domain`), make sure each maps to an enrolled Duo user or is rejected.
 
 ### 2. Configure PHP Session
 
@@ -162,6 +173,12 @@ This project is licensed under the GPL-3.0-or-later License - see the [LICENSE](
 
 ## CHANGELOG
 =========
+
+### v2.0.7 (2026-11-21)
+- Security: Duo bypasses closed (`_url` username injection, spoofable proxy headers, default `127.0.0.1` bypass, match-all malformed CIDR)
+- Usernames canonicalized; Duo approval bound to user; optional callback IP check; login-task action guard
+- Installer/config hardening (`0640` config, no web-root `logs/`, failmode warning)
+- Duo Universal SDK `^1.2.0`; CI no longer masks test failures
 
 ### v2.0.6 (2026-04-11)
 - IPv4-mapped IPv6 normalization in `get_client_ip()` for dual-stack CIDR bypass correctness

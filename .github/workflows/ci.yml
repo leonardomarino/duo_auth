@@ -93,11 +93,9 @@ jobs:
         
         # Check if composer.json exists in plugin
         if [ -f "composer.json" ]; then
-          # For older PHP/Roundcube versions, we might need to adjust dependencies
-          if [[ "${{ matrix.php-version }}" == "8.0" ]]; then
-            # Ensure compatibility with older PHP versions if needed
-            composer config platform.php ${{ matrix.php-version }}
-          fi
+          # composer.json pins platform.php to 8.2.0; resolve for the PHP
+          # version actually under test or 8.0/8.1 get 8.2-only packages
+          composer config platform.php ${{ matrix.php-version }}
           
           composer install --prefer-dist --no-interaction --optimize-autoloader
         else
@@ -261,29 +259,8 @@ jobs:
         php test_plugin_load.php || echo "Note: Plugin load test failed (may be normal for this RC version)"
 
     - name: Run Plugin Tests
-      if: always()
-      run: |
-        echo "=== Running plugin-specific tests ==="
-        
-        # If there's a tests directory in the plugin, run tests
-        if [ -d "roundcube/plugins/duo_auth/tests" ]; then
-          echo "Found tests directory"
-          cd roundcube/plugins/duo_auth
-          
-          # Check for PHPUnit
-          if [ -f "vendor/bin/phpunit" ]; then
-            echo "Running PHPUnit tests..."
-            ./vendor/bin/phpunit tests/ || echo "PHPUnit tests failed"
-          elif [ -f "phpunit.xml" ] || [ -f "phpunit.xml.dist" ]; then
-            echo "PHPUnit config found but PHPUnit not installed"
-            composer require --dev phpunit/phpunit --no-interaction
-            ./vendor/bin/phpunit tests/ || echo "PHPUnit tests failed"
-          else
-            echo "No PHPUnit configuration found"
-          fi
-        else
-          echo "No tests directory found in plugin"
-        fi
+      working-directory: roundcube/plugins/duo_auth
+      run: vendor/bin/phpunit
 
     - name: Generate Summary
       if: always()
