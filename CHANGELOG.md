@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [2.0.7] - 2026-11-21
 
 ### Security
 
@@ -29,6 +29,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `config.inc.php` created by the installer or Composer is mode `0640`. If the web server is not the file's owner or group, it can't read the config and logins are blocked (`secure`) until you `chown root:<web group> config.inc.php`.
 - You can delete any `plugins/duo_auth/logs/` directory left by the old installer.
 - Usernames sent to Duo are now lowercase. In the Duo Admin Panel, set the application's **New User Policy** to **Deny** so unenrolled username variants cannot self-enroll.
+
+### Changed
+
+- Require `duosecurity/duo_universal_php` `^1.2.0` (was `^1.0.2`). 1.1.0 added Duo's new certificate authorities; older SDKs can fail TLS to Duo (blocking logins in `secure` mode). 1.2.0 also stops falling back to the OS certificate store when CA pinning is enabled.
+- CI resolves dependencies for each matrix PHP version and fails the build when PHPUnit fails.
 
 ### Fixed
 

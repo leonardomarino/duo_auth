@@ -1,12 +1,13 @@
 <?php
 /**
  * Duo Security Plugin for Roundcube
- * Version: 2.0.6
+ * Version: 2.0.7
  *
  * Supports: Global User Bypass, Global IP Bypass, and User-Specific IP Bypass
  * Features: IPv4/IPv6 support, Proxy detection, Failmode, Comprehensive logging
  *
- * Security: startup() guard hardened; CIDR bounds and IPv4-mapped IPv6 fixed
+ * Security: server-side username only, trusted-proxy IP resolution, strict CIDR,
+ *           Duo approval bound to the logged-in user
  */
 
 declare(strict_types=1);
