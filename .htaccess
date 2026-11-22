@@ -1,0 +1,9 @@
+# Deny web access to Composer dependencies, tooling and tests.
+# Roundcube's root .htaccess only blocks the top-level vendor/ directory, so
+# on installs where plugins/ is inside the document root (Roundcube 1.6
+# layout), files under plugins/duo_auth/vendor/ would otherwise be reachable.
+# mod_alias is used instead of mod_rewrite so Roundcube's root rewrite rules
+# keep applying to this directory.
+<IfModule mod_alias.c>
+    RedirectMatch 403 /duo_auth/(vendor|bin|tests)(/|$)
+</IfModule>

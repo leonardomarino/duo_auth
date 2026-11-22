@@ -50,7 +50,6 @@
         "ext-curl": "*",
         "ext-openssl": "*",
         "ext-filter": "*",
-        "roundcube/plugin-installer": "^0.3 || ^0.4",
         "duosecurity/duo_universal_php": "^1.2.0"
     },
     "require-dev": {
@@ -81,10 +80,7 @@
     "config": {
         "optimize-autoloader": true,
         "preferred-install": "dist",
-        "sort-packages": true,
-        "allow-plugins": {
-            "roundcube/plugin-installer": true
-        }
+        "sort-packages": true
     },
     "extra": {
         "roundcube": {

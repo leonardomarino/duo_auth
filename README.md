@@ -51,8 +51,20 @@ composer require "lmr/duo_auth:^2.0"
 cd plugins/
 git clone https://github.com/leonardomarino/duo_auth.git
 cd duo_auth
-composer install
+composer install --no-dev
 ```
+
+`--no-dev` keeps test and lint tools out of `vendor/`.
+
+On the Roundcube 1.6 layout (document root = Roundcube root), the plugin directory is web-accessible, and Roundcube's own `.htaccess` only blocks the top-level `vendor/`. The plugin ships a `.htaccess` that denies `vendor/`, `bin/` and `tests/` on Apache (needs `AllowOverride FileInfo` or `All`). On nginx, add:
+
+```nginx
+location ~ ^/plugins/[^/]+/(vendor|bin|tests)/ {
+    deny all;
+}
+```
+
+Installs that use Roundcube's `public_html/` document root (the 1.7 layout) only serve plugin static files and aren't affected.
 
 Then enable the plugin by adding `'duo_auth'` to `$config['plugins']` in Roundcube's `config/config.inc.php`.
 
@@ -60,7 +72,7 @@ Then enable the plugin by adding `'duo_auth'` to `$config['plugins']` in Roundcu
 
 ### 1. Create the configuration file
 
-Both install methods create `plugins/duo_auth/config.inc.php` from `config.inc.php.dist`, but with different permissions: the manual `composer install` uses mode `0640`, while `composer require` (via Roundcube's plugin installer) uses your default umask, often `0644`. Either way, restrict it, since it holds the client secret:
+Both install methods create `plugins/duo_auth/config.inc.php` from `config.inc.php.dist`, but with different permissions: the manual `composer install --no-dev` uses mode `0640`, while `composer require` (via Roundcube's plugin installer) uses your default umask, often `0644`. Either way, restrict it, since it holds the client secret:
 
 ```bash
 cd plugins/duo_auth/
@@ -111,7 +123,8 @@ Headers are honored only when the request comes directly from a trusted proxy, a
 ### Security notes
 
 - Behind a reverse proxy, do not put the proxy's address (often `127.0.0.1`) in any bypass list: every request comes from it. Configure the proxy settings above instead.
-- Keep `duo_failmode = 'secure'` in production. With `'open'`, anyone who can stop the server reaching Duo bypasses 2FA.
+- Keep `duo_failmode = 'secure'` in production. With `'open'`, anyone who can stop the server reaching Duo bypasses 2FA. (`'open'` only applies when Duo is unreachable; configuration errors always block login.)
+- Set `duo_msg_bypass = ''` to hide the "bypassed" notice, which otherwise tells users (and attackers) that a bypass rule matched.
 - Set Roundcube's `$config['ip_check'] = true;` to bind sessions to the client IP. `duo_callback_ip_check` does the same for the Duo login step.
 - `config.inc.php` contains `duo_client_secret`: keep it at mode `0640`, owned by `root:<web server group>`.
 - In the Duo Admin Panel, set the application's **New User Policy** to **Deny**. Usernames are lowercased before being sent to Duo; if your IMAP server accepts other variants (e.g. with and without `@domain`), make sure each maps to an enrolled Duo user or is rejected.
@@ -151,7 +164,7 @@ Checked in this order:
 ### Advanced Options
 
 - **Failmode** - Choose behavior when the Duo service is unavailable (`secure` or `open`)
-- **Session Timeout** - `duo_session_timeout` sets how long a Duo approval is valid (counted from approval)
+- **Idle Timeout** - `duo_session_timeout` logs users out after that many seconds without activity (default 15 minutes)
 - **Reverse Proxy Support** - Trusted-proxy allowlist and a single configurable client-IP header
 - **Callback IP Check** - Optionally require the Duo callback to come from the login IP
 - **Debug Logging** - Detailed logs for troubleshooting (`duo_log_level = 'debug'`)
@@ -180,10 +193,12 @@ composer validate
 | Problem | Solution |
 |---------|----------|
 | 500 Error | Check PHP error logs, ensure Composer dependencies are installed |
-| "Two-factor authentication service is unavailable" | Check `duo_auth.log`. "The Client ID is invalid" / "The Client Secret is invalid" means the credentials in `config.inc.php` are wrong (IDs are 20 characters, secrets 40). "Unable to connect to Duo" means the server can't reach `duo_api_hostname` |
-| Every login is blocked after install | The web server may not be able to read `config.inc.php` (mode `0640`). Fix ownership: `chown root:<web server group> config.inc.php` |
+| "Two-factor authentication service is unavailable" | Check `duo_auth.log`. "Unable to connect to Duo" means the server can't reach `duo_api_hostname` |
+| "Duo configuration error" in the log | "The Client ID is invalid" / "The Client Secret is invalid" means the credentials in `config.inc.php` are wrong (IDs are 20 characters, secrets 40) |
+| "Two-factor authentication is not configured correctly" | Credentials are missing or invalid, or the web server can't read `config.inc.php` (mode `0640`): `chown root:<web server group> config.inc.php`. This blocks login even with `duo_failmode = 'open'` |
 | Bypass not working | Enable debug logging and check the detected client IP. Behind a proxy, configure `duo_trusted_proxies`; look for "Ignoring invalid or match-all CIDR range" warnings |
-| Logged out after a while | Adjust `duo_session_timeout` |
+| Logged out after a period of inactivity | Adjust `duo_session_timeout` (idle timeout) and Roundcube's `session_lifetime` |
+| Duo prompt times out | Users must finish the prompt within `duo_timeout` seconds (default 300) |
 
 ## Credits
 

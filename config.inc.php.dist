@@ -24,13 +24,17 @@ $config['duo_enabled'] = true;
 // WARNING: with 'open', anyone who can stop this server reaching Duo (DNS
 // tampering, an egress block, an outage) turns every login into password-only.
 // Use 'open' only for initial testing, never in production.
+// 'open' applies only when Duo can't be reached. Configuration errors (missing
+// or invalid client ID/secret) always block login.
 $config['duo_failmode'] = 'secure';
 
 // Time allowed between the password login and the Duo callback (seconds).
-// Users must finish the Duo prompt within this window. Default if unset: 300.
-$config['duo_timeout'] = 60;
+// Users must finish the Duo prompt within this window.
+$config['duo_timeout'] = 300; // 5 minutes
 
-// Session timeout after successful Duo auth (seconds)
+// Idle timeout after successful Duo auth (seconds). Each request resets the
+// clock; after this long without activity the user must log in again.
+// Roundcube's own session_lifetime still applies.
 $config['duo_session_timeout'] = 900; // 15 minutes
 
 // Require the Duo callback to come from the same client IP that submitted the
@@ -85,9 +89,11 @@ $config['duo_bypass_rules'] = [
 // Custom messages
 $config['duo_msg_unavailable'] = 'Two-factor authentication service is temporarily unavailable.';
 $config['duo_msg_failed'] = 'Two-factor authentication failed. Please try again.';
+// Set duo_msg_bypass to '' to hide the notice (it reveals that a bypass rule matched)
 $config['duo_msg_bypass'] = 'Two-factor authentication bypassed for this session.';
 $config['duo_msg_incomplete'] = 'Two-factor authentication was not completed. Please login again.';
 $config['duo_msg_required'] = 'Two-factor authentication is required.';
+$config['duo_msg_misconfigured'] = 'Two-factor authentication is not configured correctly. Please contact your administrator.';
 
 // Proxy settings (if behind reverse proxy)
 // Headers are honored ONLY when the request comes directly from an address in

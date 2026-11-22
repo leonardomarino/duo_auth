@@ -402,6 +402,213 @@ class SecurityHardeningTest extends TestCase
         $this->assertStringContainsString('chmod($config_file, 0640)', $src);
     }
 
+    // =========================================================================
+    // Failmode: config errors fail secure; only unreachable Duo honors 'open'
+    // =========================================================================
+
+    private const VALID_DUO = [
+        'duo_client_id' => 'DIXXXXXXXXXXXXXXXXXX',                        // 20 chars
+        'duo_client_secret' => 'deadbeefdeadbeefdeadbeefdeadbeefdeadbeef', // 40 chars
+        'duo_api_hostname' => '127.0.0.1:1',                               // connection refused
+    ];
+
+    private function runLoginAfter(duo_auth $plugin): ?array
+    {
+        try {
+            return $plugin->login_after(['_task' => 'mail']);
+        } catch (DuoAuthTestRedirectException $e) {
+            return null;
+        }
+    }
+
+    public function testConfigErrorFailsSecureEvenInOpenMode()
+    {
+        $plugin = $this->plugin([
+            'task' => 'login', 'action' => 'login',
+            'user' => ['id' => 1, 'username' => 'victim'],
+            'config' => ['duo_failmode' => 'open', 'duo_client_id' => 'too_short'],
+        ]);
+
+        $this->assertNull($this->runLoginAfter($plugin), 'Expected redirect to login');
+        $this->assertArrayNotHasKey('duo_authenticated', $_SESSION);
+        $this->assertTrue(rcube::get_instance()->killed_session);
+        $this->assertStringContainsString('not configured correctly', rcube::get_instance()->output->messages[0]['message']);
+    }
+
+    public function testMissingConfigFailsSecureEvenInOpenMode()
+    {
+        $plugin = $this->plugin([
+            'task' => 'login', 'action' => 'login',
+            'user' => ['id' => 1, 'username' => 'victim'],
+            'config' => ['duo_failmode' => 'open', 'duo_client_secret' => null],
+        ]);
+
+        $this->assertNull($this->runLoginAfter($plugin));
+        $this->assertArrayNotHasKey('duo_authenticated', $_SESSION);
+    }
+
+    public function testUnreachableDuoHonorsOpenMode()
+    {
+        $plugin = $this->plugin([
+            'task' => 'login', 'action' => 'login',
+            'user' => ['id' => 1, 'username' => 'victim'],
+            'config' => self::VALID_DUO + ['duo_failmode' => 'open'],
+        ]);
+
+        $this->assertIsArray($this->runLoginAfter($plugin));
+        $this->assertSame('failmode_open', $_SESSION['duo_authenticated']['method']);
+    }
+
+    public function testUnreachableDuoBlocksInSecureMode()
+    {
+        $plugin = $this->plugin([
+            'task' => 'login', 'action' => 'login',
+            'user' => ['id' => 1, 'username' => 'victim'],
+            'config' => self::VALID_DUO + ['duo_failmode' => 'secure'],
+        ]);
+
+        $this->assertNull($this->runLoginAfter($plugin));
+        $this->assertArrayNotHasKey('duo_authenticated', $_SESSION);
+        $this->assertTrue(rcube::get_instance()->killed_session);
+    }
+
+    // =========================================================================
+    // Idle timeout
+    // =========================================================================
+
+    public function testActivityRefreshesDuoSession()
+    {
+        $plugin = $this->plugin([
+            'task' => 'mail',
+            'user' => ['id' => 1, 'username' => 'victim'],
+            'session' => [
+                'duo_authenticated' => ['username' => 'victim', 'method' => 'duo_push', 'timestamp' => time() - 800],
+            ],
+            'config' => ['duo_session_timeout' => 900],
+        ]);
+
+        $this->assertIsArray($plugin->startup([]));
+        $this->assertGreaterThanOrEqual(time() - 1, $_SESSION['duo_authenticated']['timestamp']);
+    }
+
+    public function testIdleDuoSessionExpires()
+    {
+        $plugin = $this->plugin([
+            'task' => 'mail',
+            'user' => ['id' => 1, 'username' => 'victim'],
+            'session' => [
+                'duo_authenticated' => ['username' => 'victim', 'method' => 'duo_push', 'timestamp' => time() - 901],
+            ],
+            'config' => ['duo_session_timeout' => 900],
+        ]);
+
+        $this->assertStartupBlocks($plugin);
+    }
+
+    public function testDuoSessionWithoutTimestampIsExpired()
+    {
+        $plugin = $this->plugin([
+            'task' => 'mail',
+            'user' => ['id' => 1, 'username' => 'victim'],
+            'session' => ['duo_authenticated' => ['username' => 'victim', 'method' => 'duo_push']],
+        ]);
+
+        $this->assertStartupBlocks($plugin);
+    }
+
+    // =========================================================================
+    // Callback state, bypass notice, logging
+    // =========================================================================
+
+    public function testCallbackRejectsWrongState()
+    {
+        $plugin = $this->plugin([
+            'task' => 'login',
+            'action' => 'plugin.duo_callback',
+            'session' => ['duo_state' => 'state123', 'duo_user' => 'victim', 'duo_ip' => '127.0.0.1', 'duo_timestamp' => time()],
+        ]);
+        rcube_utils::set_input_value('duo_code', 'code');
+        rcube_utils::set_input_value('state', 'state124');
+
+        try {
+            $plugin->callback_handler();
+            $this->fail('Expected callback to be rejected');
+        } catch (DuoAuthTestRedirectException $e) {
+        }
+        $this->assertStringContainsString('Invalid state', rcube::get_instance()->output->messages[0]['message']);
+    }
+
+    public function testBypassNoticeShownByDefault()
+    {
+        $plugin = $this->plugin([
+            'task' => 'login', 'action' => 'login',
+            'user' => ['id' => 1, 'username' => 'svc'],
+            'config' => ['duo_bypass_users' => ['svc']],
+        ]);
+
+        $this->assertIsArray($plugin->login_after(['_task' => 'mail']));
+        $this->assertSame('notice', rcube::get_instance()->output->messages[0]['type']);
+    }
+
+    public function testBypassNoticeCanBeDisabled()
+    {
+        $plugin = $this->plugin([
+            'task' => 'login', 'action' => 'login',
+            'user' => ['id' => 1, 'username' => 'svc'],
+            'config' => ['duo_bypass_users' => ['svc'], 'duo_msg_bypass' => ''],
+        ]);
+
+        $this->assertIsArray($plugin->login_after(['_task' => 'mail']));
+        $this->assertSame([], rcube::get_instance()->output->messages);
+        $this->assertSame('global_user_bypass', $_SESSION['duo_authenticated']['method']);
+    }
+
+    public function testLogMessagesCannotInjectLines()
+    {
+        $plugin = $this->plugin(['config' => ['duo_log_enabled' => true, 'duo_log_level' => 'debug']]);
+        $GLOBALS['test_logs'] = [];
+
+        $this->call($plugin, 'log', 'info', "user 'evil\n[ERROR] forged\r\x1b[2J'");
+
+        $logs = DuoAuthTestHelper::getLogs();
+        $this->assertCount(1, $logs);
+        $this->assertDoesNotMatchRegularExpression('/[\x00-\x1F\x7F]/', $logs[0]['message']);
+        $this->assertStringContainsString('evil?[ERROR] forged??', $logs[0]['message']);
+    }
+
+    // =========================================================================
+    // Packaging
+    // =========================================================================
+
+    public function testComposerDoesNotPullInRoundcube()
+    {
+        $composer = json_decode(file_get_contents(__DIR__ . '/../composer.json'), true);
+
+        // roundcube/plugin-installer requires roundcube/roundcubemail, which a
+        // manual install would place inside plugins/duo_auth/vendor (web root)
+        $this->assertArrayNotHasKey('roundcube/plugin-installer', $composer['require']);
+        $this->assertArrayNotHasKey('roundcube/roundcubemail', $composer['require']);
+        $this->assertArrayNotHasKey('platform', $composer['config'] ?? []);
+    }
+
+    public function testHtaccessDeniesVendorBinAndTests()
+    {
+        $htaccess = file_get_contents(__DIR__ . '/../.htaccess');
+
+        $this->assertMatchesRegularExpression('#RedirectMatch 403 /duo_auth/\(vendor\|bin\|tests\)#', $htaccess);
+        // mod_rewrite in a subdirectory would replace Roundcube's root rules
+        $this->assertStringNotContainsString('RewriteEngine', $htaccess);
+    }
+
+    public function testConfigTemplateTimeouts()
+    {
+        $config = [];
+        include __DIR__ . '/../config.inc.php.dist';
+
+        $this->assertSame(300, $config['duo_timeout']);
+        $this->assertSame(900, $config['duo_session_timeout']);
+    }
+
     public function testLoginFormPostIsNotBlocked()
     {
         $plugin = $this->plugin([

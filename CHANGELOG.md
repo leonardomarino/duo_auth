@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- Manual installs no longer place a full copy of Roundcube inside the web root. `roundcube/plugin-installer` (which requires `roundcube/roundcubemail` since 0.3.4) is no longer a dependency, so `composer install` in `plugins/duo_auth` stopped pulling Roundcube, including its `installer/`, into `plugins/duo_auth/vendor/`. Roundcube 1.6+ already requires the plugin installer itself, so `composer require lmr/duo_auth` from the Roundcube root still installs into `plugins/`. If you installed manually, delete `plugins/duo_auth/vendor/` and run `composer install --no-dev`.
+- Added a plugin `.htaccess` denying web access to `vendor/`, `bin/` and `tests/`. Roundcube's root `.htaccess` only blocks the top-level `vendor/`, so on the 1.6 layout files such as the Duo SDK's bundled demo app (`vendor/duosecurity/duo_universal_php/example/index.php`) were reachable. The README documents the equivalent nginx rule.
+- Configuration errors (missing or invalid client ID/secret, unreadable config) now always block login. Previously, with `duo_failmode = 'open'`, they showed "proceeding without" 2FA. `'open'` now applies only when Duo can't be reached; other Duo errors also fail secure.
+- Log messages have control characters replaced, so client-supplied usernames or headers can't forge or split log lines.
+- The Duo callback `state` is compared in constant time (`hash_equals`).
+- `duo_msg_bypass = ''` hides the bypass notice, which reveals that a bypass rule matched.
+- CI: workflow token restricted to `contents: read`; third-party actions pinned to commit SHAs; the plugin-load check no longer ignores failures.
+
+### Changed
+
+- `duo_session_timeout` is now an **idle** timeout: each authenticated request resets it. Previously it was counted from the Duo approval and never refreshed, logging every Duo-protected user out 15 minutes after login regardless of activity. A record without a timestamp is treated as expired.
+- `config.inc.php.dist`: `duo_timeout` default raised from 60 to 300 seconds, matching the code's default (60s was tight for completing a push). Existing config files are unchanged.
+- New message option `duo_msg_misconfigured`.
+- `bin/install.php` no longer requires the `sockets` extension (unused; `inet_pton()` is core PHP).
+
 ### Fixed
 
 - Removed `config.platform.php` (`8.2.0`) from `composer.json`. It made `composer install` inside the plugin directory (the manual install) resolve dependencies as if running PHP 8.2, so PHP 8.0/8.1 servers could get packages they can't run. Dependencies now resolve for the PHP version actually in use. Installs via `composer require` from the Roundcube root were not affected. CI no longer needs its per-matrix override.
