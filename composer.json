@@ -72,7 +72,7 @@
         "stan": "vendor/bin/phpstan analyse",
         "check": ["@cs", "@stan", "@test"],
         "post-install-cmd": [
-            "@php -r \"file_exists('config.inc.php') || copy('config.inc.php.dist', 'config.inc.php');\""
+            "@php -r \"file_exists('config.inc.php') || (copy('config.inc.php.dist', 'config.inc.php') && chmod('config.inc.php', 0640) && print('config.inc.php created with mode 0640 - make sure the web server group can read it, e.g. chown root:www-data config.inc.php' . PHP_EOL));\""
         ],
         "post-update-cmd": [
             "@php -r \"echo '\\n⚠️  Check config.inc.php.dist for new configuration options\\n';\""

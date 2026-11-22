@@ -59,39 +59,17 @@ if (!file_exists('duo_auth.php')) {
 }
 echo "OK\n";
 
-// Create necessary directories (simplified - no src directories needed)
-echo "\nCreating directories...\n";
-$dirs = [
-    'logs' => 'Log files'
-];
-
-foreach ($dirs as $dir => $description) {
-    echo "  - {$dir}/ ({$description})... ";
-    if (!is_dir($dir)) {
-        if (mkdir($dir, 0755, true)) {
-            echo "CREATED\n";
-        } else {
-            echo "FAILED\n";
-            echo "Warning: Could not create directory {$dir}\n";
-        }
-    } else {
-        echo "EXISTS\n";
-    }
-}
-
-// Set proper permissions
-echo "\nSetting permissions...\n";
-$permission_dirs = ['logs'];
-foreach ($permission_dirs as $dir) {
-    if (is_dir($dir)) {
-        echo "  - {$dir}/... ";
-        if (chmod($dir, 0755)) {
-            echo "OK\n";
-        } else {
-            echo "WARNING: Could not set permissions\n";
+// Detect web server user (used for config ownership advice)
+$web_user = null;
+if (function_exists('posix_getpwnam')) {
+    foreach (['www-data', 'apache', 'nginx', 'httpd'] as $user) {
+        if (posix_getpwnam($user)) {
+            $web_user = $user;
+            break;
         }
     }
 }
+$web_group = $web_user ?? '<web-server-group>';
 
 // Copy configuration file if it doesn't exist
 echo "\nSetting up configuration...\n";
@@ -103,8 +81,10 @@ if (!file_exists($config_file)) {
         echo "  - Copying configuration template... ";
         if (copy($config_dist, $config_file)) {
             echo "OK\n";
-            // Make config readable but not world-readable
-            chmod($config_file, 0644);
+            // Config holds duo_client_secret: owner read/write, group read, no world access
+            chmod($config_file, 0640);
+            echo "  - Permissions set to 0640. Make it readable by the web server with:\n";
+            echo "      sudo chown root:{$web_group} {$config_file}\n";
             echo "\n";
             echo "╔════════════════════════════════════════════════════════════╗\n";
             echo "║                    IMPORTANT!                              ║\n";
@@ -130,6 +110,11 @@ if (!file_exists($config_file)) {
     }
 } else {
     echo "  - Configuration file already exists... OK\n";
+
+    if (fileperms($config_file) & 0004) {
+        echo "  - WARNING: {$config_file} is world-readable and contains duo_client_secret. Run:\n";
+        echo "      chmod 0640 {$config_file} && sudo chown root:{$web_group} {$config_file}\n";
+    }
     
     // Check configuration validity
     echo "  - Checking configuration... ";
@@ -221,37 +206,9 @@ if (file_exists('vendor/autoload.php')) {
     echo "  - Run: composer install\n";
 }
 
-// Test logging capability
-echo "\nTesting logging capability... ";
-if (!is_dir('logs')) {
-    mkdir('logs', 0755, true);
-}
-
-$log_file = 'logs/duo_auth.log';
-$test_entry = "[" . date('Y-m-d H:i:s') . "] [INFO] Installation script completed\n";
-if (@file_put_contents($log_file, $test_entry, FILE_APPEND | LOCK_EX)) {
-    echo "OK\n";
-    
-    // Try to set ownership for web server (optional)
-    $web_user = null;
-    if (function_exists('posix_getpwnam')) {
-        foreach (['www-data', 'apache', 'nginx', 'httpd'] as $user) {
-            if (posix_getpwnam($user)) {
-                $web_user = $user;
-                break;
-            }
-        }
-    }
-    
-    if ($web_user) {
-        echo "  - Detected web server user: {$web_user}\n";
-        echo "  - To allow web server to write logs, run:\n";
-        echo "      sudo chown -R {$web_user}:{$web_user} logs/\n";
-    }
-} else {
-    echo "WARNING\n";
-    echo "  - Cannot write to log file. Check permissions.\n";
-}
+// Logging goes through Roundcube's own log driver - nothing to create here
+echo "\nLogging: written by Roundcube to its log_dir as duo_auth.log\n";
+echo "  (e.g. <roundcube>/logs/duo_auth.log, or syslog/stdout per log_driver)\n\n";
 
 // Check Roundcube integration
 echo "\nChecking Roundcube integration...\n";
@@ -309,12 +266,6 @@ if (file_exists('vendor/autoload.php')) {
     $steps_completed[] = "✓ Composer dependencies installed";
 } else {
     $steps_remaining[] = "Run: composer install";
-}
-
-if (is_writable('logs')) {
-    $steps_completed[] = "✓ Logging directory ready";
-} else {
-    $steps_remaining[] = "Fix permissions on logs/ directory";
 }
 
 // Show completed steps

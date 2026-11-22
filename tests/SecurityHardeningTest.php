@@ -294,6 +294,114 @@ class SecurityHardeningTest extends TestCase
         $this->assertFalse(rcube::get_instance()->killed_session);
     }
 
+    // =========================================================================
+    // 6. Duo approval bound to user; optional callback IP check
+    // =========================================================================
+
+    public function testDuoApprovalForAnotherUserIsRejected()
+    {
+        $plugin = $this->plugin([
+            'task' => 'mail',
+            'user' => ['id' => 1, 'username' => 'victim'],
+            'session' => [
+                'duo_authenticated' => ['username' => 'attacker', 'method' => 'duo_push', 'timestamp' => time()],
+            ],
+        ]);
+
+        $this->assertStartupBlocks($plugin);
+    }
+
+    public function testDuoApprovalMatchingUserIsAccepted()
+    {
+        $plugin = $this->plugin([
+            'task' => 'mail',
+            'user' => ['id' => 1, 'username' => 'Victim'],
+            'session' => [
+                'duo_authenticated' => ['username' => 'victim', 'method' => 'duo_push', 'timestamp' => time()],
+            ],
+        ]);
+
+        $this->assertIsArray($plugin->startup([]));
+        $this->assertFalse(rcube::get_instance()->killed_session);
+    }
+
+    private function callbackSession(string $ip): array
+    {
+        return [
+            'duo_state' => 'state123',
+            'duo_user' => 'victim',
+            'duo_ip' => $ip,
+            'duo_timestamp' => time(),
+        ];
+    }
+
+    public function testCallbackFromDifferentIpRejectedWhenEnabled()
+    {
+        $plugin = $this->plugin([
+            'task' => 'login',
+            'action' => 'plugin.duo_callback',
+            'remote_addr' => '203.0.113.9',
+            'session' => $this->callbackSession('198.51.100.7'),
+            'config' => ['duo_callback_ip_check' => true],
+        ]);
+        rcube_utils::set_input_value('duo_code', 'code');
+        rcube_utils::set_input_value('state', 'state123');
+
+        try {
+            $plugin->callback_handler();
+            $this->fail('Expected callback to be rejected');
+        } catch (DuoAuthTestRedirectException $e) {
+            $this->assertSame('login', $e->url['_task']);
+        }
+        $this->assertStringContainsString('Network address changed', rcube::get_instance()->output->messages[0]['message']);
+    }
+
+    public function testCallbackIpCheckOffByDefault()
+    {
+        $plugin = $this->plugin([
+            'task' => 'login',
+            'action' => 'plugin.duo_callback',
+            'remote_addr' => '203.0.113.9',
+            'session' => $this->callbackSession('198.51.100.7'),
+        ]);
+        rcube_utils::set_input_value('duo_code', 'code');
+        rcube_utils::set_input_value('state', 'state123');
+
+        try {
+            $plugin->callback_handler();
+        } catch (DuoAuthTestRedirectException $e) {
+            // Fails later at the Duo code exchange (no Duo in tests), not on IP
+        }
+        foreach (rcube::get_instance()->output->messages as $msg) {
+            $this->assertStringNotContainsString('Network address changed', $msg['message']);
+        }
+    }
+
+    // =========================================================================
+    // 7-9. Config template and installer
+    // =========================================================================
+
+    public function testConfigTemplateWarnsAgainstFailOpenAndDefaultsSecure()
+    {
+        $config = [];
+        include __DIR__ . '/../config.inc.php.dist';
+        $text = file_get_contents(__DIR__ . '/../config.inc.php.dist');
+
+        $this->assertSame('secure', $config['duo_failmode']);
+        $this->assertStringContainsString('never in production', $text);
+        $this->assertFalse($config['duo_callback_ip_check']);
+    }
+
+    public function testInstallerDoesNotCreateWebAccessibleLogsOrWorldReadableConfig()
+    {
+        $src = file_get_contents(__DIR__ . '/../bin/install.php');
+
+        $this->assertStringNotContainsString("mkdir('logs'", $src);
+        $this->assertStringNotContainsString('logs/duo_auth.log', str_replace('<roundcube>/logs/duo_auth.log', '', $src));
+        $this->assertStringNotContainsString('0644', $src);
+        $this->assertStringContainsString('chmod($config_file, 0640)', $src);
+    }
+
     public function testLoginFormPostIsNotBlocked()
     {
         $plugin = $this->plugin([

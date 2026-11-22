@@ -16,10 +16,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Usernames are canonicalized (trimmed, lowercased) before bypass matching and before being sent to Duo, so case variants accepted by IMAP map to a single Duo identity.
 - `startup()` no longer lets every `_task=login` action through. Only the bare login page, the login POST and the Duo callback are exempt; other plugins' login-task actions now require completed Duo for logged-in sessions (anonymous visitors are unaffected).
 
+- A completed Duo approval is now bound to the user it was issued for: `is_duo_authenticated()` discards a `duo_authenticated` record whose username doesn't match the logged-in user.
+- New `duo_callback_ip_check` option (default `false`) rejects the Duo callback if it comes from a different client IP than the password login. The README now recommends Roundcube's `ip_check`.
+- `config.inc.php.dist` warns that `duo_failmode = 'open'` turns every login into password-only for anyone who can cut the server off from Duo.
+- `bin/install.php` now creates `config.inc.php` with mode `0640` (was `0644`, despite the comment saying "not world-readable"), prints a `chown root:<web group>` hint, and warns if an existing config is world-readable. Composer's `post-install-cmd` also sets `0640`.
+- `bin/install.php` no longer creates a `logs/` directory inside the plugin (and web root). The plugin logs through Roundcube's log driver, so that directory was unused.
+
 ### Upgrade notes
 
 - If you set `duo_trust_proxy_headers = true`, you must now list your proxy in `duo_trusted_proxies` (IP or CIDR), and set `duo_proxy_header` if it isn't `X-Forwarded-For`. Otherwise headers are ignored and `REMOTE_ADDR` is used.
 - If your `config.inc.php` was copied from an older template, remove `127.0.0.1` from `duo_bypass_ips` unless you are certain no local proxy sits in front of Roundcube.
+- `config.inc.php` created by the installer or Composer is mode `0640`. If the web server is not the file's owner or group, it can't read the config and logins are blocked (`secure`) until you `chown root:<web group> config.inc.php`.
+- You can delete any `plugins/duo_auth/logs/` directory left by the old installer.
 - Usernames sent to Duo are now lowercase. In the Duo Admin Panel, set the application's **New User Policy** to **Deny** so unenrolled username variants cannot self-enroll.
 
 ### Fixed

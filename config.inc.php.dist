@@ -21,6 +21,9 @@ $config['duo_redirect_uri'] = 'https://your-domain.com/roundcube/?_task=login&_a
 $config['duo_enabled'] = true;
 
 // Failmode: 'secure' (block login if Duo is down) or 'open' (allow login)
+// WARNING: with 'open', anyone who can stop this server reaching Duo (DNS
+// tampering, an egress block, an outage) turns every login into password-only.
+// Use 'open' only for initial testing, never in production.
 $config['duo_failmode'] = 'secure';
 
 // Timeout for Duo API calls (seconds)
@@ -28,6 +31,13 @@ $config['duo_timeout'] = 60;
 
 // Session timeout after successful Duo auth (seconds)
 $config['duo_session_timeout'] = 900; // 15 minutes
+
+// Require the Duo callback to come from the same client IP that submitted the
+// password. Off by default: users whose IP changes mid-login (mobile networks,
+// load-balanced egress) would be rejected.
+// To bind the whole session to the client IP, also set Roundcube's own
+// $config['ip_check'] = true; in config/config.inc.php.
+$config['duo_callback_ip_check'] = false;
 
 // ============================================================================
 // Logging Settings

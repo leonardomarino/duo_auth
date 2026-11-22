@@ -333,6 +333,12 @@ class duo_auth extends rcube_plugin
             $this->fail_login('Authentication timeout. Please try again.');
         }
 
+        // Optionally require the callback to come from the IP that started the login
+        if ($this->rc->config->get('duo_callback_ip_check', false) && $this->get_client_ip() !== $saved_ip) {
+            $this->log('error', "Callback IP " . $this->get_client_ip() . " does not match login IP '$saved_ip'");
+            $this->fail_login('Security check failed: Network address changed during authentication.');
+        }
+
         try {
             // Initialize Duo client
             $duo_client = $this->get_duo_client();
@@ -617,6 +623,15 @@ class duo_auth extends rcube_plugin
         }
         
         $auth_data = $_SESSION['duo_authenticated'];
+
+        // The Duo approval must belong to the user who is logged in now
+        $current_user = $this->get_username();
+        if ($current_user === null || ($auth_data['username'] ?? null) !== $current_user) {
+            $this->log('warning', 'SECURITY: Duo authentication does not match the logged-in user - discarding');
+            unset($_SESSION['duo_authenticated']);
+            return false;
+        }
+
         $timeout = $this->rc->config->get('duo_session_timeout', 900); // 15 minutes default
         
         // Check if authentication has timed out

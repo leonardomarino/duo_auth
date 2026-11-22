@@ -77,6 +77,9 @@ $config['duo_bypass_rules'] = [                     // Conditional bypasses
 
 > **Security notes**
 > - Behind a reverse proxy, do not put the proxy's address (often `127.0.0.1`) in any bypass list: every request comes from it. Set `duo_trust_proxy_headers`, `duo_trusted_proxies` and `duo_proxy_header` instead.
+> - Keep `duo_failmode = 'secure'` in production. With `'open'`, anyone who can stop the server reaching Duo bypasses 2FA.
+> - Set Roundcube's `$config['ip_check'] = true;` to bind sessions to the client IP. `duo_callback_ip_check` does the same for the Duo login step.
+> - `config.inc.php` contains `duo_client_secret`: keep it at mode `0640`, owned by `root:<web server group>`.
 > - In the Duo Admin Panel, set the application's **New User Policy** to **Deny**. Usernames are lowercased before being sent to Duo; if your IMAP server accepts other variants (e.g. with and without `@domain`), make sure each maps to an enrolled Duo user or is rejected.
 
 ### 2. Configure PHP Session
